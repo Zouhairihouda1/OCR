@@ -206,4 +206,4 @@ class ImageProcessor:
         except Exception as e:
             self.logger.error(f"Erreur prétraitement complet: {e}")
         
-        return processed_image
+        return processed_image# Développé par Hiba Saad

@@ -154,4 +154,4 @@ class QualityAnalyzer:
         elif quality_score >= 0.4:
             return "Moyenne"
         else:
-            return "Mauvaise"
+            return "Mauvaise"# Développé par Hiba Saad

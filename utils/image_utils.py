@@ -200,4 +200,4 @@ class ImageUtils:
             
         except Exception as e:
             self.logger.error(f"Erreur conversion OpenCV vers PIL: {e}")
-            raise
+            raise# Développé par Hiba Saad
