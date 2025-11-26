@@ -1,0 +1,1 @@
+#ici la classe image maager
