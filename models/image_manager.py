@@ -1,1 +1,1 @@
-#ici la classe image maager
+#ici la classe image manager
