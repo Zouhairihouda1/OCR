@@ -1,7 +1,6 @@
 """
 Module de suivi des performances du système OCR
-Auteur: Personne 4
-Version corrigée
+
 """
 
 import time
