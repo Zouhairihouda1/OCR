@@ -1,7 +1,5 @@
 """
 Page de visualisation des performances
-Auteur: Personne 4
-Version corrigée - Nom de classe corrigé
 """
 
 import streamlit as st
