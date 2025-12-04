@@ -1,0 +1,24 @@
+
+
+
+# Traitement d'images
+Pillow>=10.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# OCR
+pytesseract>=0.3.10
+
+# Interface utilisateur
+streamlit>=1.28.0
+
+# Analyse et statistiques
+pandas>=2.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Correction orthographique (bonus)
+pyspellchecker>=0.7.2
+
+# Tests
+pytest>=7.4.0

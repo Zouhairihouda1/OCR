@@ -1,1 +1,0 @@
-echo "# Composant header pour l'interface OCR"

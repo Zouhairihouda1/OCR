@@ -1,208 +1,314 @@
-# models/performance_tracker.py
 """
-Module de suivi des performances OCR - Historique et export
+Module de suivi des performances du système OCR
+
 """
 
-import csv
-import json
-import pandas as pd
+import time
 from datetime import datetime
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Optional
-from .statistics import OCRMetrics  # Import depuis votre autre module
+import json
+
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    print("⚠️ psutil non disponible - métriques système désactivées")
+
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+
 
 class PerformanceTracker:
     """
-    Classe pour enregistrer et analyser l'historique des performances OCR
+    Classe pour suivre les performances du système OCR
     """
     
-    def __init__(self, csv_path: str = "data/statistics.csv"):
-        self.csv_path = csv_path
-        self.ensure_csv_exists()
-    
-    def ensure_csv_exists(self):
-        """
-        Crée le fichier CSV avec les en-têtes s'il n'existe pas
-        """
-        # Créer le dossier data/ s'il n'existe pas
-        Path(self.csv_path).parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self):
+        """Initialise le tracker de performances"""
+        self.metrics = {
+            'start_time': None,
+            'end_time': None,
+            'processing_times': [],
+            'memory_usage': [],
+            'cpu_usage': [],
+            'errors': []
+        }
+        self.session_active = False
         
-        # Créer le fichier avec en-têtes s'il n'existe pas
-        if not Path(self.csv_path).exists():
-            with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    'timestamp',           # Quand le traitement a eu lieu
-                    'image_path',          # Chemin de l'image
-                    'accuracy',            # Précision (0-1)
-                    'processing_time',     # Temps de traitement (secondes)
-                    'character_error_rate', # Taux d'erreur caractères
-                    'word_error_rate',     # Taux d'erreur mots
-                    'confidence_score',    # Score de confiance OCR
-                    'document_type',       # Type de document
-                    'extracted_text_length', # Longueur du texte extrait
-                    'reference_text_length'  # Longueur du texte référence
-                ])
-            print(f"✅ Fichier CSV créé: {self.csv_path}")
-    
-    def log_performance(self, metrics: OCRMetrics):
+    @contextmanager
+    def track_processing(self, operation_name: str):
         """
-        Enregistre les métriques d'une image dans le CSV
+        Contexte pour suivre le temps d'exécution d'une opération
+        
+        Usage:
+            with tracker.track_processing("OCR Extraction"):
+                # Code à mesurer
+        
+        Args:
+            operation_name: Nom de l'opération à tracer
         """
-        with open(self.csv_path, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                metrics.timestamp,
-                metrics.image_path,
-                metrics.accuracy,
-                metrics.processing_time,
-                metrics.character_error_rate,
-                metrics.word_error_rate,
-                metrics.confidence_score,
-                metrics.document_type,
-                len(metrics.extracted_text) if hasattr(metrics, 'extracted_text') else 0,
-                len(metrics.reference_text) if hasattr(metrics, 'reference_text') else 0
-            ])
-        print(f"📊 Performances enregistrées pour: {metrics.image_path}")
-    
-    def log_performance_from_dict(self, performance_data: Dict):
-        """
-        Enregistre les performances à partir d'un dictionnaire
-        """
-        with open(self.csv_path, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                performance_data.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
-                performance_data.get('image_path', 'unknown'),
-                performance_data.get('accuracy', 0),
-                performance_data.get('processing_time', 0),
-                performance_data.get('character_error_rate', 0),
-                performance_data.get('word_error_rate', 0),
-                performance_data.get('confidence_score', 0),
-                performance_data.get('document_type', 'unknown'),
-                performance_data.get('extracted_text_length', 0),
-                performance_data.get('reference_text_length', 0)
-            ])
-    
-    def get_all_performance_data(self) -> pd.DataFrame:
-        """
-        Retourne toutes les données de performance sous forme de DataFrame
-        """
+        start_time = time.time()
+        start_memory = self._get_memory_usage()
+        start_cpu = self._get_cpu_usage()
+        
+        error_occurred = False
+        error_message = None
+        
         try:
-            df = pd.read_csv(self.csv_path)
-            return df
+            yield
+            
         except Exception as e:
-            print(f"❌ Erreur lecture CSV: {e}")
-            return pd.DataFrame()
-    
-    def get_statistics_summary(self) -> Dict:
-        """
-        Retourne un résumé statistique de toutes les performances
-        """
-        df = self.get_all_performance_data()
-        
-        if df.empty:
-            return {
-                'status': 'no_data',
-                'message': 'Aucune donnée de performance disponible'
+            error_occurred = True
+            error_message = str(e)
+            
+            self.metrics['errors'].append({
+                'operation': operation_name,
+                'error': error_message,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            print(f"❌ Erreur dans {operation_name}: {e}")
+            raise
+            
+        finally:
+            # Toujours enregistrer les métriques, même en cas d'erreur
+            end_time = time.time()
+            processing_time = end_time - start_time
+            
+            end_memory = self._get_memory_usage()
+            end_cpu = self._get_cpu_usage()
+            
+            memory_delta = end_memory - start_memory if start_memory is not None else 0
+            cpu_delta = end_cpu - start_cpu if start_cpu is not None else 0
+            
+            metric_entry = {
+                'operation': operation_name,
+                'time_seconds': round(processing_time, 3),
+                'memory_change_mb': round(memory_delta, 2),
+                'cpu_change_percent': round(cpu_delta, 2),
+                'timestamp': datetime.now().isoformat(),
+                'status': 'error' if error_occurred else 'success'
             }
-        
-        return {
-            'status': 'success',
-            'total_images_processed': len(df),
-            'overall_accuracy': df['accuracy'].mean(),
-            'average_processing_time': df['processing_time'].mean(),
-            'best_accuracy': df['accuracy'].max(),
-            'worst_accuracy': df['accuracy'].min(),
-            'accuracy_std': df['accuracy'].std(),
-            'total_processing_time': df['processing_time'].sum(),
-            'printed_docs_count': len(df[df['document_type'] == 'printed']),
-            'handwritten_docs_count': len(df[df['document_type'] == 'handwritten']),
-            'printed_accuracy': df[df['document_type'] == 'printed']['accuracy'].mean() if 'printed' in df['document_type'].values else 0,
-            'handwritten_accuracy': df[df['document_type'] == 'handwritten']['accuracy'].mean() if 'handwritten' in df['document_type'].values else 0
-        }
+            
+            if error_occurred:
+                metric_entry['error'] = error_message
+            
+            self.metrics['processing_times'].append(metric_entry)
+            
+            if not error_occurred:
+                print(f"⏱️  {operation_name}: {processing_time:.3f}s")
     
-    def get_performance_trends(self, window: int = 5) -> Dict:
+    def _get_memory_usage(self) -> Optional[float]:
         """
-        Analyse les tendances des performances (amélioration/détérioration)
+        Retourne l'utilisation mémoire en MB
+        
+        Returns:
+            Mémoire en MB ou None si psutil indisponible
         """
-        df = self.get_all_performance_data()
+        if not PSUTIL_AVAILABLE:
+            return None
         
-        if len(df) < window:
-            return {'status': 'insufficient_data', 'message': f'Données insuffisantes (min {window} enregistrements)'}
-        
-        # Tendance de la précision (derniers N enregistrements)
-        recent_accuracy = df['accuracy'].tail(window).mean()
-        previous_accuracy = df['accuracy'].head(len(df) - window).mean()
-        
-        accuracy_trend = "stable"
-        if recent_accuracy > previous_accuracy + 0.05:
-            accuracy_trend = "amélioration"
-        elif recent_accuracy < previous_accuracy - 0.05:
-            accuracy_trend = "détérioration"
-        
-        return {
-            'status': 'success',
-            'recent_accuracy': recent_accuracy,
-            'previous_accuracy': previous_accuracy,
-            'accuracy_trend': accuracy_trend,
-            'trend_direction': 'up' if accuracy_trend == "amélioration" else 'down' if accuracy_trend == "détérioration" else 'stable'
-        }
+        try:
+            import os
+            process = psutil.Process(os.getpid())
+            return process.memory_info().rss / 1024 / 1024  # Convertir en MB
+        except Exception as e:
+            print(f"⚠️ Impossible de mesurer la mémoire: {e}")
+            return None
     
-    def export_to_json(self, json_path: str = "data/performance_report.json"):
+    def _get_cpu_usage(self) -> Optional[float]:
         """
-        Exporte les statistiques vers un fichier JSON
+        Retourne l'utilisation CPU en pourcentage
+        
+        Returns:
+            CPU en % ou None si psutil indisponible
         """
-        summary = self.get_statistics_summary()
-        trends = self.get_performance_trends()
+        if not PSUTIL_AVAILABLE:
+            return None
         
-        report = {
-            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'summary': summary,
-            'trends': trends,
-            'data_source': self.csv_path
-        }
+        try:
+            return psutil.cpu_percent(interval=0.1)
+        except Exception as e:
+            print(f"⚠️ Impossible de mesurer le CPU: {e}")
+            return None
+    
+    def start_session(self):
+        """Démarre une nouvelle session de suivi"""
+        self.metrics['start_time'] = datetime.now().isoformat()
+        self.session_active = True
+        print("🚀 Session de suivi démarrée")
+    
+    def end_session(self) -> Dict:
+        """
+        Termine la session de suivi et génère un rapport
         
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(report, f, indent=2, ensure_ascii=False)
+        Returns:
+            Dictionnaire contenant le rapport de session
+        """
+        self.metrics['end_time'] = datetime.now().isoformat()
+        self.session_active = False
         
-        print(f"📄 Rapport JSON exporté: {json_path}")
+        report = self._generate_session_report()
+        print("🏁 Session de suivi terminée")
+        
         return report
     
-    def clear_history(self):
+    def _generate_session_report(self) -> Dict:
         """
-        Réinitialise l'historique des performances
+        Génère un rapport de session
+        
+        Returns:
+            Dictionnaire avec les statistiques de session
         """
-        if Path(self.csv_path).exists():
-            Path(self.csv_path).unlink()
-        self.ensure_csv_exists()
-        print("🗑️ Historique des performances réinitialisé")
-
-# Exemple d'utilisation
-if __name__ == "__main__":
-    # Test du module
-    tracker = PerformanceTracker()
+        if not self.metrics['processing_times']:
+            print("⚠️ Aucune opération enregistrée")
+            return {}
+        
+        times = [t['time_seconds'] for t in self.metrics['processing_times']]
+        total_time = sum(times)
+        avg_time = total_time / len(times)
+        
+        report = {
+            'session_start': self.metrics['start_time'],
+            'session_end': self.metrics['end_time'],
+            'total_operations': len(self.metrics['processing_times']),
+            'successful_operations': len([t for t in self.metrics['processing_times'] if t['status'] == 'success']),
+            'failed_operations': len([t for t in self.metrics['processing_times'] if t['status'] == 'error']),
+            'total_processing_time': round(total_time, 2),
+            'average_operation_time': round(avg_time, 3),
+            'min_operation_time': round(min(times), 3),
+            'max_operation_time': round(max(times), 3),
+            'operations': self.metrics['processing_times'],
+            'errors_count': len(self.metrics['errors']),
+            'errors': self.metrics['errors']
+        }
+        
+        # Sauvegarder le rapport
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_file = Path(f"data/performance_report_{timestamp}.json")
+            
+            # Créer le dossier si nécessaire
+            report_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(report_file, 'w', encoding='utf-8') as f:
+                json.dump(report, f, indent=2, ensure_ascii=False)
+            
+            print(f"📊 Rapport de performance sauvegardé: {report_file}")
+            
+        except Exception as e:
+            print(f"⚠️ Impossible de sauvegarder le rapport: {e}")
+        
+        return report
     
-    # Données de test
-    test_metrics = OCRMetrics(
-        image_path="test_image.jpg",
-        accuracy=0.85,
-        processing_time=2.3,
-        character_error_rate=0.15,
-        word_error_rate=0.20,
-        confidence_score=0.9,
-        document_type="printed",
-        timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    )
+    def get_performance_summary(self) -> Dict:
+        """
+        Retourne un résumé des performances actuelles
+        
+        Returns:
+            Dictionnaire avec statistiques sommaires
+        """
+        if not self.metrics['processing_times']:
+            return {
+                'total_operations': 0,
+                'total_time': 0,
+                'average_time': 0,
+                'min_time': 0,
+                'max_time': 0,
+                'errors_count': 0,
+                'success_rate': 0
+            }
+        
+        times = [t['time_seconds'] for t in self.metrics['processing_times']]
+        successful = len([t for t in self.metrics['processing_times'] if t['status'] == 'success'])
+        total = len(self.metrics['processing_times'])
+        
+        return {
+            'total_operations': total,
+            'successful_operations': successful,
+            'failed_operations': total - successful,
+            'total_time': round(sum(times), 2),
+            'average_time': round(sum(times) / len(times), 3),
+            'min_time': round(min(times), 3),
+            'max_time': round(max(times), 3),
+            'errors_count': len(self.metrics['errors']),
+            'success_rate': round((successful / total) * 100, 2) if total > 0 else 0
+        }
     
-    # Enregistrement
-    tracker.log_performance(test_metrics)
+    def export_to_dataframe(self):
+        """
+        Exporte les métriques en DataFrame pour visualisation
+        
+        Returns:
+            DataFrame pandas ou None si pandas indisponible
+        """
+        if not PANDAS_AVAILABLE:
+            print("⚠️ pandas non disponible")
+            return None
+        
+        if not self.metrics['processing_times']:
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(self.metrics['processing_times'])
+        
+        # Convertir timestamp en datetime
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
+        return df
     
-    # Affichage des statistiques
-    summary = tracker.get_statistics_summary()
-    print("📊 Résumé des performances:")
-    for key, value in summary.items():
-        print(f"  {key}: {value}")
+    def get_latest_operations(self, n: int = 10) -> List[Dict]:
+        """
+        Retourne les N dernières opérations
+        
+        Args:
+            n: Nombre d'opérations à retourner
+        
+        Returns:
+            Liste des dernières opérations
+        """
+        return self.metrics['processing_times'][-n:] if self.metrics['processing_times'] else []
     
-    # Export JSON
-    tracker.export_to_json()
+    def reset_metrics(self):
+        """Réinitialise toutes les métriques"""
+        self.metrics = {
+            'start_time': None,
+            'end_time': None,
+            'processing_times': [],
+            'memory_usage': [],
+            'cpu_usage': [],
+            'errors': []
+        }
+        self.session_active = False
+        print("🔄 Métriques réinitialisées")
+    
+    def get_errors_summary(self) -> Dict:
+        """
+        Retourne un résumé des erreurs
+        
+        Returns:
+            Dictionnaire avec statistiques des erreurs
+        """
+        if not self.metrics['errors']:
+            return {
+                'total_errors': 0,
+                'error_types': {},
+                'recent_errors': []
+            }
+        
+        # Grouper par type d'erreur
+        error_types = {}
+        for error in self.metrics['errors']:
+            operation = error['operation']
+            error_types[operation] = error_types.get(operation, 0) + 1
+        
+        return {
+            'total_errors': len(self.metrics['errors']),
+            'error_types': error_types,
+            'recent_errors': self.metrics['errors'][-5:]  # 5 dernières erreurs
+        }

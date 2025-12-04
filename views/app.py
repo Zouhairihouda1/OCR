@@ -1,0 +1,592 @@
+import streamlit as st
+import os
+import sys
+import importlib.util
+
+# ========== CONFIGURATION OBLIGATOIRE ==========
+st.set_page_config(
+    page_title="Système OCR - Reconnaissance de Texte",
+    page_icon="📄",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ========== CONFIGURATION DES CHEMINS ==========
+current_dir = os.path.dirname(os.path.abspath(__file__))  # /workspaces/OCR/views
+project_root = os.path.dirname(current_dir)  # /workspaces/OCR
+
+# Ajouter tous les chemins possibles
+sys.path.insert(0, project_root)  # /workspaces/OCR
+sys.path.insert(0, os.path.join(project_root, "models"))  # /workspaces/OCR/models
+sys.path.insert(0, current_dir)  # /workspaces/OCR/views
+
+# ========== FONCTION D'IMPORT AMÉLIORÉE ==========
+def load_module(module_name, class_name=None):
+    """Charge un module de manière robuste - VERSION CORRIGÉE"""
+    try:
+        # 1. Essayer avec le chemin direct
+        module_path = os.path.join(project_root, "models", f"{module_name}.py")
+        
+        if os.path.exists(module_path):
+            spec = importlib.util.spec_from_file_location(module_name, module_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            
+            if class_name:
+                # Vérifier si la classe existe dans le module
+                if hasattr(module, class_name):
+                    return getattr(module, class_name)
+                else:
+                    # Chercher d'autres noms de classes possibles
+                    for attr_name in dir(module):
+                        if attr_name.lower() == class_name.lower():
+                            return getattr(module, attr_name)
+                    return None
+            return module
+            
+        # 2. Essayer d'importer normalement
+        module = __import__(module_name, fromlist=[class_name] if class_name else [])
+        if class_name:
+            return getattr(module, class_name)
+        return module
+        
+    except Exception as e:
+        # Log l'erreur silencieusement
+        print(f"[DEBUG] Erreur chargement {module_name}.{class_name}: {e}")
+        return None
+
+# ========== CHARGER LES MODULES ==========
+ImageManager = None
+ImageProcessor = None
+OCREngine = None
+
+# DEBUG: Afficher les fichiers disponibles
+models_dir = os.path.join(project_root, "models")
+print(f"[DEBUG] Chemin models: {models_dir}")
+if os.path.exists(models_dir):
+    print("[DEBUG] Fichiers dans models/:")
+    for f in os.listdir(models_dir):
+        if f.endswith('.py'):
+            print(f"  - {f}")
+
+# CHARGEMENT CORRIGÉ pour img_manager.py
+try:
+    # VOTRE FICHIER S'APPELLE img_manager.py
+    ImageManager = load_module("img_manager", "ImageManager")
+    if ImageManager is None:
+        # Essayer sans majuscule
+        ImageManager = load_module("img_manager", "ImageManager".lower())
+except Exception as e:
+    print(f"[DEBUG] Erreur ImageManager: {e}")
+    ImageManager = None
+
+# Charger ImageProcessor (garder le même nom)
+try:
+    ImageProcessor = load_module("image_processor", "ImageProcessor")
+    if ImageProcessor is None:
+        ImageProcessor = load_module("image_processor", "ImageProcessor".lower())
+except Exception as e:
+    print(f"[DEBUG] Erreur ImageProcessor: {e}")
+    ImageProcessor = None
+
+# Charger OCREngine
+try:
+    OCREngine = load_module("ocr_engine", "OCREngine")
+    if OCREngine is None:
+        OCREngine = load_module("ocr_engine", "OCREngine".lower())
+except Exception as e:
+    print(f"[DEBUG] Erreur OCREngine: {e}")
+    OCREngine = None
+
+# Vérifier les modules de stats
+try:
+    # Essayer différents noms pour les statistiques
+    StatisticsCalculator = load_module("statistics", "StatisticsCalculator")
+    if StatisticsCalculator is None:
+        StatisticsCalculator = load_module("statistics", "OCRStatistics")
+    
+    PerformanceTracker = load_module("performance_tracker", "PerformanceTracker")
+    STATS_AVAILABLE = StatisticsCalculator is not None or PerformanceTracker is not None
+except:
+    STATS_AVAILABLE = False
+
+# Déterminer si les modules sont disponibles
+MODULES_AVAILABLE = all([ImageManager, ImageProcessor, OCREngine])
+
+# Debug dans la sidebar
+st.sidebar.markdown("---")
+with st.sidebar.expander("🔍 Debug Modules"):
+    st.write(f"**ImageManager:** {'✅' if ImageManager else '❌'}")
+    st.write(f"**ImageProcessor:** {'✅' if ImageProcessor else '❌'}")
+    st.write(f"**OCREngine:** {'✅' if OCREngine else '❌'}")
+    st.write(f"**STATS_AVAILABLE:** {'✅' if STATS_AVAILABLE else '❌'}")
+
+# ========== FONCTIONS D'AFFICHAGE ==========
+def show_home_page():
+    """Page d'accueil"""
+    st.title("🎯 Système OCR - Reconnaissance de Texte")
+    st.markdown("---")
+    
+    # Bannière d'information
+    if not MODULES_AVAILABLE:
+        st.warning("⚠️ Mode démo - Certains modules OCR ne sont pas chargés")
+        
+        # Diagnostic détaillé
+        with st.expander("🔍 Diagnostic détaillé"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Modules manquants:**")
+                if not ImageManager:
+                    st.error("❌ img_manager.py non trouvé")
+                if not ImageProcessor:
+                    st.error("❌ image_processor.py non trouvé")
+                if not OCREngine:
+                    st.error("❌ ocr_engine.py non trouvé")
+            
+            with col2:
+                st.write("**Vérifiez:**")
+                st.write("1. Fichiers dans `models/`")
+                st.write("2. Noms exacts des fichiers")
+                st.write("3. Classes dans les fichiers")
+                
+                if st.button("🔄 Vérifier à nouveau"):
+                    st.rerun()
+    
+    # Présentation en colonnes
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("🚀 Fonctionnalités")
+        
+        # Cartes de fonctionnalités
+        with st.container():
+            st.markdown("### 📸 Traitement d'Image Unique")
+            st.markdown("""
+            - **Téléchargement d'image** depuis votre ordinateur
+            - **Prétraitement automatique** (nettoyage, contraste, rotation)
+            - **Extraction de texte** avec Tesseract OCR
+            - **Export des résultats** en format texte ou PDF
+            """)
+            
+            if st.button("Essayer le traitement simple", key="btn_simple"):
+                st.session_state.page = "Traitement Simple"
+                st.rerun()
+        
+        with st.container():
+            st.markdown("### 📂 Traitement par Lot")
+            st.markdown("""
+            - **Traitement multiple** d'images simultané
+            - **Export batch** de tous les résultats
+            - **Statistiques comparatives** entre documents
+            - **Historique** des traitements
+            """)
+            
+            if st.button("Essayer le traitement par lot", key="btn_batch"):
+                st.session_state.page = "Traitement par Lot"
+                st.rerun()
+            
+        with st.container():
+            st.markdown("### 📊 Analyse de Performance")
+            st.markdown("""
+            - **Métriques de précision** détaillées
+            - **Visualisations graphiques** interactives
+            - **Historique** des traitements
+            - **Recommandations** d'amélioration
+            """)
+            
+            if st.button("Voir les statistiques", key="btn_stats"):
+                st.session_state.page = "Performance"
+                st.rerun()
+    
+    with col2:
+        st.subheader("📈 État du Système")
+        
+        # Métriques
+        if MODULES_AVAILABLE and ImageManager:
+            try:
+                manager = ImageManager()
+                stats = manager.get_statistics()
+                
+                st.metric("📄 Images Imprimées", stats['printed']['count'])
+                st.metric("✍️ Images Manuscrites", stats['handwritten']['count'])
+                
+                # Afficher le total
+                total = stats['printed']['count'] + stats['handwritten']['count']
+                st.progress(min(total / 20, 1.0), text=f"{total} images au total")
+                    
+                st.success("✅ Système opérationnel")
+            except Exception as e:
+                st.info("📁 Aucune image dans la base ou erreur de chargement")
+                st.code(f"Erreur: {str(e)[:50]}...")
+        else:
+            st.info("🔄 En attente des modules")
+            # Afficher les compteurs à 0
+            st.metric("📄 Images Imprimées", 0)
+            st.metric("✍️ Images Manuscrites", 0)
+            st.progress(0, text="0 images au total")
+        
+        # Modules disponibles
+        st.markdown("### 🛠️ Modules Disponibles")
+        
+        modules_status = [
+            ("Gestionnaire d'Images", ImageManager is not None),
+            ("Prétraitement", ImageProcessor is not None),
+            ("Moteur OCR", OCREngine is not None),
+            ("Interface", True),
+            ("Statistiques", STATS_AVAILABLE)
+        ]
+        
+        for name, available in modules_status:
+            icon = "✅" if available else "❌"
+            color = "green" if available else "red"
+            st.markdown(f'<span style="color:{color}">{icon} {name}</span>', 
+                       unsafe_allow_html=True)
+        
+        # Bouton de diagnostic
+        if st.button("🔍 Diagnostiquer", type="secondary"):
+            with st.expander("Diagnostic technique"):
+                st.write("**Chemins Python:**")
+                for path in sys.path[:5]:
+                    st.write(f"- {path}")
+                
+                st.write("**Fichiers dans models/:**")
+                if os.path.exists(models_dir):
+                    files = [f for f in os.listdir(models_dir) if f.endswith(".py")]
+                    if files:
+                        for file in files:
+                            file_path = os.path.join(models_dir, file)
+                            size = os.path.getsize(file_path)
+                            st.write(f"- `{file}` ({size} bytes)")
+                    else:
+                        st.write("Aucun fichier .py trouvé")
+                else:
+                    st.write(f"Dossier models/ n'existe pas: {models_dir}")
+
+def show_simple_processing():
+    """Page de traitement simple"""
+    st.title("🔍 Traitement Simple d'Image")
+    st.markdown("---")
+    
+    if not MODULES_AVAILABLE:
+        st.error("❌ Les modules OCR ne sont pas disponibles")
+        
+        # Afficher quel module manque
+        missing_modules = []
+        if not ImageManager:
+            missing_modules.append("img_manager.py")
+        if not ImageProcessor:
+            missing_modules.append("image_processor.py")
+        if not OCREngine:
+            missing_modules.append("ocr_engine.py")
+        
+        st.info(f"**Modules manquants:** {', '.join(missing_modules)}")
+        st.info("Veuillez d'abord résoudre les problèmes d'importation depuis la page d'accueil")
+        return
+    
+    # Mode démo si pas toutes les dépendances
+    try:
+        import pytesseract
+        import cv2
+        import numpy as np
+        from PIL import Image as PILImage
+        HAS_DEPS = True
+    except ImportError:
+        HAS_DEPS = False
+        st.warning("⚠️ Dépendances manquantes. Mode démo activé.")
+    
+    # Onglets
+    tab1, tab2, tab3 = st.tabs(["📤 Télécharger", "⚙️ Traiter", "📊 Résultats"])
+    
+    with tab1:
+        st.subheader("Étape 1: Télécharger une image")
+        
+        uploaded_file = st.file_uploader(
+            "Glissez-déposez une image ici",
+            type=['png', 'jpg', 'jpeg', 'tiff', 'bmp'],
+            help="Formats supportés: PNG, JPG, JPEG, TIFF, BMP",
+            key="upload_simple"
+        )
+        
+        if uploaded_file:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.image(uploaded_file, caption="Aperçu", use_column_width=True)
+            
+            with col2:
+                st.success("✅ Image téléchargée avec succès")
+                
+                # Sauvegarder temporairement
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    st.session_state.image_path = tmp.name
+                
+                st.info(f"**Détails:**")
+                st.write(f"- Nom: {uploaded_file.name}")
+                st.write(f"- Taille: {uploaded_file.size / 1024:.1f} KB")
+                st.write(f"- Type: {uploaded_file.type}")
+                
+                if st.button("Suivant → Traitement", type="primary"):
+                    st.session_state.current_tab = "⚙️ Traiter"
+                    st.rerun()
+    
+    with tab2:
+        st.subheader("Étape 2: Options de traitement")
+        
+        if "image_path" not in st.session_state:
+            st.warning("Veuillez d'abord télécharger une image dans l'onglet précédent")
+        else:
+            # Options de prétraitement
+            st.write("**Paramètres de prétraitement:**")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                convert_grayscale = st.checkbox("Convertir en niveaux de gris", value=True)
+                enhance_contrast = st.checkbox("Améliorer le contraste", value=True)
+                remove_noise = st.checkbox("Réduire le bruit", value=True)
+            
+            with col2:
+                auto_deskew = st.checkbox("Redresser automatiquement", value=True)
+                binarize = st.checkbox("Binarisation", value=True)
+                language = st.selectbox("Langue", ["fra", "eng", "spa", "deu"], index=0)
+            
+            if st.button("🚀 Exécuter l'OCR", type="primary"):
+                with st.spinner("Traitement en cours..."):
+                    try:
+                        if not HAS_DEPS:
+                            # Mode démo sans vraies dépendances
+                            import time
+                            time.sleep(2)
+                            
+                            # Résultats simulés
+                            st.session_state.ocr_results = {
+                                'text': "Ceci est un texte d'exemple extrait par OCR.\nLe système fonctionne en mode démo.\nInstallez pytesseract, opencv-python et pillow pour le mode réel.",
+                                'average_confidence': 85.5,
+                                'word_count': 15,
+                                'processing_time': 2.1
+                            }
+                            st.success("✅ Traitement terminé (mode démo)!")
+                            st.session_state.current_tab = "📊 Résultats"
+                            st.rerun()
+                            return
+                        
+                        # Mode réel avec les modules
+                        # 1. Charger l'image
+                        img = PILImage.open(st.session_state.image_path)
+                        
+                        # 2. Prétraitement
+                        if ImageProcessor:
+                            processor = ImageProcessor()
+                            img_array = processor.apply_all_preprocessing(img, {
+                                'grayscale': convert_grayscale,
+                                'binarization': 'otsu' if binarize else None,
+                                'denoise': remove_noise,
+                                'contrast': 1.5 if enhance_contrast else 1.0,
+                                'deskew': auto_deskew
+                            })
+                        else:
+                            st.error("Module de prétraitement non disponible")
+                            return
+                        
+                        # 3. OCR
+                        if OCREngine:
+                            ocr = OCREngine()
+                            
+                            if isinstance(img_array, PILImage.Image):
+                                import numpy as np
+                                img_array = np.array(img_array)
+                            
+                            results = ocr.extract_text_with_confidence(img_array, language=language)
+                            st.session_state.ocr_results = results
+                            st.success("✅ Traitement terminé!")
+                            
+                            # Passer à l'onglet résultats
+                            st.session_state.current_tab = "📊 Résultats"
+                            st.rerun()
+                        else:
+                            st.error("Module OCR non disponible")
+                            
+                    except Exception as e:
+                        st.error(f"Erreur lors du traitement: {str(e)}")
+    
+    with tab3:
+        st.subheader("Étape 3: Résultats")
+        
+        if "ocr_results" not in st.session_state:
+            st.info("Aucun résultat disponible. Exécutez d'abord l'OCR dans l'onglet Traitement.")
+        else:
+            results = st.session_state.ocr_results
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.text_area("📝 Texte extrait", 
+                           results.get('text', 'Aucun texte extrait'),
+                           height=300)
+            
+            with col2:
+                st.metric("Confiance", f"{results.get('average_confidence', 0):.1f}%")
+                st.metric("Nombre de mots", results.get('word_count', 0))
+                st.metric("Temps", f"{results.get('processing_time', 0):.2f}s")
+                
+                # Boutons d'export
+                st.download_button(
+                    "💾 Télécharger (.txt)",
+                    results.get('text', ''),
+                    file_name="resultat_ocr.txt",
+                    mime="text/plain"
+                )
+                
+                if st.button("📊 Voir les détails"):
+                    with st.expander("Détails de l'extraction"):
+                        if 'detailed_data' in results:
+                            import pandas as pd
+                            df = pd.DataFrame(results['detailed_data'])
+                            st.dataframe(df.head())
+
+def show_batch_processing():
+    """Page de traitement par lot"""
+    st.title("📊 Traitement par Lot d'Images")
+    st.markdown("---")
+    
+    if not MODULES_AVAILABLE:
+        st.error("❌ Modules OCR non disponibles")
+        return
+    
+    st.info("Cette fonctionnalité est en cours de développement")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Fonctionnalités prévues")
+        st.write("""
+        - Téléchargement multiple d'images
+        - Traitement parallélisé
+        - Export des résultats en batch
+        - Statistiques comparatives
+        - Rapport PDF généré automatiquement
+        """)
+    
+    with col2:
+        st.subheader("Progression")
+        st.write("**État:** En développement")
+        st.write("**Équipe:** Personne 4 (Interface)")
+        st.write("**Priorité:** Haute")
+        
+        # Barre de progression simulée
+        st.progress(0.6, text="Développement à 60%")
+        
+        if st.button("🧪 Tester fonctionnalité"):
+            st.info("Fonctionnalité bientôt disponible!")
+
+def show_performance():
+    """Page de statistiques"""
+    st.title("📈 Analyse de Performance")
+    st.markdown("---")
+    
+    if not STATS_AVAILABLE:
+        st.warning("Les modules de statistiques ne sont pas disponibles")
+        
+        # Mode démo des statistiques
+        with st.expander("Mode démo des statistiques"):
+            import pandas as pd
+            import plotly.express as px
+            
+            # Données d'exemple
+            data = pd.DataFrame({
+                'Date': pd.date_range('2024-01-01', periods=10),
+                'Précision': [85, 78, 92, 88, 76, 90, 85, 79, 93, 87],
+                'Type': ['Imprimé', 'Manuscrit'] * 5,
+                'Temps (s)': [1.2, 2.5, 1.1, 3.0, 1.3, 2.8, 1.0, 3.2, 1.4, 2.9]
+            })
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Images traitées", 10)
+            with col2:
+                st.metric("Précision moyenne", "85.3%")
+            with col3:
+                st.metric("Temps moyen", "2.04s")
+            
+            fig = px.line(data, x='Date', y='Précision', color='Type', 
+                         title="Évolution de la précision (démo)")
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.info("Créez les fichiers statistics.py et performance_tracker.py pour activer cette fonctionnalité")
+        return
+    
+    st.success("Module de statistiques disponible!")
+    
+    # Ici, vous appellerez vos vraies fonctions de statistiques
+    try:
+        if StatisticsCalculator:
+            stats = StatisticsCalculator()
+            # Appeler les fonctions de statistiques
+            st.info("Fonctionnalité de statistiques activée!")
+    except:
+        st.warning("Erreur lors du chargement des statistiques")
+
+# ========== SIDEBAR ==========
+with st.sidebar:
+    st.title("📄 OCR System")
+    st.markdown("---")
+    
+    # Initialiser la page si nécessaire
+    if "page" not in st.session_state:
+        st.session_state.page = "Accueil"
+    
+    # Navigation
+    st.subheader("Navigation")
+    
+    pages = {
+        "🏠 Accueil": "Accueil",
+        "🔍 Traitement Simple": "Traitement Simple", 
+        "📊 Traitement par Lot": "Traitement par Lot",
+        "📈 Performance": "Performance"
+    }
+    
+    for icon_name, page_name in pages.items():
+        if st.button(icon_name, key=f"nav_{page_name}", use_container_width=True):
+            st.session_state.page = page_name
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # État du système
+    st.subheader("État du système")
+    
+    if MODULES_AVAILABLE:
+        st.success("✅ Modules OCR chargés")
+    else:
+        st.error("❌ Modules manquants")
+        
+        with st.expander("Dépannage"):
+            st.write("**Problème:** Les imports échouent")
+            st.write(f"**Fichier recherché:** `img_manager.py`")
+            st.write("```python")
+            st.write(f"# Chemin actuel: {current_dir}")
+            st.write(f"# Racine projet: {project_root}")
+            st.write("```")
+            
+            st.write("**Solution 1:** Vérifiez le nom exact")
+            st.write("```bash")
+            st.write("ls -la models/")
+            st.write("```")
+            
+            st.write("**Solution 2:** Vérifiez la classe dans le fichier")
+            st.write("Le fichier doit contenir: `class ImageManager:`")
+    
+    st.markdown("---")
+
+# ========== ROUTING PRINCIPAL ==========
+if st.session_state.page == "Accueil":
+    show_home_page()
+elif st.session_state.page == "Traitement Simple":
+    show_simple_processing()
+elif st.session_state.page == "Traitement par Lot":
+    show_batch_processing()
+elif st.session_state.page == "Performance":
+    show_performance()
