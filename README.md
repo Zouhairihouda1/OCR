@@ -36,8 +36,7 @@ Un système OCR (Optical Character Recognition) capable de lire du texte imprim�
 - *OpenCV* - Prétraitement d'images
 - *Pillow* - Manipulation d'images
 - *pandas* - Statistiques
-- *pyspellchecker* - Correction orthographique
-- *tkinter* - Interface graphique
+- *streamlit* - Interface graphique
 
 
 ### Installation des dépendances Python
