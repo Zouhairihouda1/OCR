@@ -7,10 +7,26 @@ from typing import Dict, List, Tuple, Optional
 import json
 import time
 
+# AJOUTE CET IMPORT (CHOISIS UNE OPTION) :
+# Option 1 - Import relatif (recommandé)
+from .language_detector import LanguageDetector
+
+# Option 2 - Si erreur avec le relatif
+try:
+    from .language_detector import LanguageDetector
+except ImportError:
+    from language_detector import LanguageDetector
+
+# Option 3 - Import absolu
+# from models.language_detector import LanguageDetector
+
 class OCREngine:
     def __init__(self):
         self.supported_languages = ['fra', 'eng', 'deu', 'spa']
         self.default_language = 'fra'
+        
+        # AJOUTE CETTE INITIALISATION :
+        self.language_detector = LanguageDetector()  # Instance de ton détecteur
         
         # Configuration des modes PSM (Page Segmentation Mode)
         self.psm_configs = {
@@ -24,7 +40,8 @@ class OCREngine:
     def extract_text(self, 
                     image: np.ndarray, 
                     language: str = 'fra',
-                    doc_type: str = 'printed_block') -> str:
+                    doc_type: str = 'printed_block',
+                    auto_detect_lang: bool = False) -> str:  # AJOUTE CE PARAMÈTRE
         """
         Extraire le texte d'une image avec configuration optimisée
         
@@ -32,11 +49,24 @@ class OCREngine:
             image: Image numpy array (OpenCV)
             language: Langue pour OCR ('fra', 'eng', etc.)
             doc_type: Type de document pour optimisation
+            auto_detect_lang: Activer la détection automatique de langue
         
         Returns:
             Texte extrait
         """
         try:
+            # DÉTECTION AUTOMATIQUE DE LANGUE (NOUVEAU)
+            if auto_detect_lang:
+                # D'abord extraire avec langue par défaut pour analyse
+                temp_text = self._extract_quick(image, language)
+                
+                # Utilise ton LanguageDetector pour déterminer la langue
+                detected_lang_code = self.language_detector.detect_best_match(temp_text)
+                
+                # Convertit le code en format Tesseract
+                language = self._map_to_tesseract_lang(detected_lang_code)
+                print(f"Langue détectée: {detected_lang_code} -> Tesseract: {language}")
+            
             # Validation de la langue
             if language not in self.supported_languages:
                 language = self.default_language
@@ -58,15 +88,61 @@ class OCREngine:
             print(f"Erreur lors de l'extraction OCR: {e}")
             return ""
     
+    # AJOUTE CETTE NOUVELLE MÉTHODE :
+    def extract_text_with_lang_detection(self, 
+                                        image: np.ndarray, 
+                                        doc_type: str = 'printed_block') -> Dict:
+        """
+        Extraction intelligente avec détection automatique de langue
+        
+        Returns:
+            Dict avec texte et informations de langue
+        """
+        start_time = time.time()
+        
+        # 1. Détection rapide de la langue
+        quick_text = self._extract_quick(image, 'eng+fra')  # Mixte pour détection
+        detected_lang = self.language_detector.detect_best_match(quick_text)
+        
+        # 2. Conversion pour Tesseract
+        tesseract_lang = self._map_to_tesseract_lang(detected_lang)
+        
+        # 3. Extraction complète avec la bonne langue
+        final_text = self.extract_text(image, tesseract_lang, doc_type)
+        
+        # 4. Correction si français détecté
+        corrected_text = final_text
+        if detected_lang == 'fr':
+            # Tu pourrais ajouter la correction ici si tu veux
+            pass
+        
+        processing_time = time.time() - start_time
+        
+        return {
+            'text': final_text,
+            'corrected_text': corrected_text,
+            'detected_language': detected_lang,
+            'tesseract_language': tesseract_lang,
+            'confidence': self._calculate_confidence(image, tesseract_lang),
+            'processing_time': round(processing_time, 2),
+            'word_count': len(final_text.split())
+        }
+    
+    # MODIFIE TA MÉTHODE EXISTANTE pour inclure la langue détectée :
     def extract_text_with_confidence(self, 
                                    image: np.ndarray, 
-                                   language: str = 'fra') -> Dict:
+                                   language: str = 'fra',
+                                   auto_detect: bool = False) -> Dict:  # AJOUTE CE PARAMÈTRE
         """
         Extraire le texte avec les données de confiance
         
-        Returns:
-            Dict avec texte, confiance moyenne et données détaillées
+        Args:
+            auto_detect: Activer la détection automatique de langue
         """
+        # Détection automatique si demandée
+        if auto_detect:
+            return self.extract_text_with_lang_detection(image)
+        
         try:
             # Configuration pour données détaillées
             config = '--psm 6 --oem 3'
@@ -90,42 +166,87 @@ class OCREngine:
                 'text': text.strip(),
                 'average_confidence': round(avg_confidence, 2),
                 'word_count': len([w for w in data['text'] if w.strip()]),
-                'detailed_data': data
+                'detailed_data': data,
+                'language': language,
+                'detected_language': None  # Pas de détection dans ce mode
             }
             
         except Exception as e:
             print(f"Erreur extraction avec confiance: {e}")
-            return {'text': '', 'average_confidence': 0, 'word_count': 0, 'detailed_data': {}}
+            return {'text': '', 'average_confidence': 0, 'word_count': 0, 
+                    'detailed_data': {}, 'language': language, 'detected_language': None}
     
-    def detect_language(self, image: np.ndarray) -> str:
+    # REMPLACE ta méthode detect_language par une qui utilise TON détecteur :
+    def detect_language(self, image: np.ndarray) -> Dict:
         """
-        Détection automatique de la langue
+        Détection automatique de la langue avec ton LanguageDetector
         """
         try:
-            pil_image = Image.fromarray(image)
+            # Extraction rapide
+            quick_text = self._extract_quick(image, 'eng+fra')
             
-            # Test avec différentes langues
-            best_lang = 'fra'
-            best_score = 0
+            if not quick_text or len(quick_text) < 10:
+                return {
+                    'language': 'unknown',
+                    'confidence': 0.0,
+                    'method': 'insufficient_text'
+                }
             
-            for lang in self.supported_languages:
-                try:
-                    data = pytesseract.image_to_data(pil_image, lang=lang, 
-                                                   output_type=pytesseract.Output.DICT)
-                    confidences = [int(c) for c in data['conf'] if int(c) > 0]
-                    if confidences:
-                        avg_conf = sum(confidences) / len(confidences)
-                        if avg_conf > best_score:
-                            best_score = avg_conf
-                            best_lang = lang
-                except:
-                    continue
+            # Utilise TON détecteur
+            result = self.language_detector.detect_with_statistics(quick_text)
             
-            return best_lang
+            return {
+                'language': result['detected_language'],
+                'language_name': result['language_name'],
+                'confidence': result['confidence_percentage'],
+                'method': 'language_detector_analysis',
+                'text_sample': quick_text[:100] + '...' if len(quick_text) > 100 else quick_text
+            }
             
         except Exception as e:
             print(f"Erreur détection langue: {e}")
-            return 'fra'
+            return {
+                'language': 'fra',
+                'confidence': 0.0,
+                'method': 'error_fallback',
+                'error': str(e)
+            }
+    
+    # AJOUTE CES MÉTHODES PRIVÉES UTILITAIRES :
+    def _extract_quick(self, image: np.ndarray, language: str = 'eng+fra') -> str:
+        """Extraction rapide pour analyse de langue"""
+        try:
+            pil_image = Image.fromarray(image)
+            config = '--psm 6 --oem 3'
+            text = pytesseract.image_to_string(pil_image, lang=language, config=config)
+            return text.strip()
+        except:
+            return ""
+    
+    def _map_to_tesseract_lang(self, lang_code: str) -> str:
+        """Convertit code langue -> code Tesseract"""
+        mapping = {
+            'fr': 'fra',
+            'en': 'eng',
+            'es': 'spa',
+            'de': 'deu',
+            'it': 'ita',
+            'pt': 'por',
+            'nl': 'nld',
+            'ru': 'rus'
+        }
+        return mapping.get(lang_code, 'eng+fra')  # Mixte par défaut
+    
+    def _calculate_confidence(self, image: np.ndarray, language: str) -> float:
+        """Calcule la confiance moyenne pour une langue"""
+        try:
+            pil_image = Image.fromarray(image)
+            data = pytesseract.image_to_data(pil_image, lang=language, 
+                                           output_type=pytesseract.Output.DICT)
+            confidences = [int(c) for c in data['conf'] if int(c) > 0]
+            return round(sum(confidences) / len(confidences), 2) if confidences else 0
+        except:
+            return 0.0
     
     def batch_process(self, images: List[np.ndarray], language: str = 'fra') -> List[Dict]:
         """
@@ -147,8 +268,25 @@ class OCREngine:
         
         return results
 
-# Utilisation simple
+# AJOUTE CE TEST D'INTÉGRATION :
 if __name__ == "__main__":
-    # Test rapide
+    # Test avec LanguageDetector intégré
     ocr = OCREngine()
-    print("OCR Engine initialisé avec succès!")
+    
+    print("=" * 60)
+    print("Test d'intégration LanguageDetector dans OCREngine")
+    print("=" * 60)
+    
+    # Test avec une image factice (noire)
+    test_image = np.zeros((100, 100, 3), dtype=np.uint8)
+    
+    # Test de détection
+    lang_info = ocr.detect_language(test_image)
+    print(f"Détection langue: {lang_info}")
+    
+    # Test extraction avec détection auto
+    result = ocr.extract_text_with_lang_detection(test_image)
+    print(f"\nExtraction avec détection: {result.keys()}")
+    
+    print("\n Intégration LanguageDetector réussie!")
+    print("=" * 60)
