@@ -1,1 +1,0 @@
-#ici la classe image manager
