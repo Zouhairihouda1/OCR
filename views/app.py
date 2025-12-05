@@ -2,6 +2,43 @@ import streamlit as st
 import os
 import sys
 import importlib.util
+from pathlib import Path 
+
+
+
+
+# ========== IMPORT DU CONTRÔLEUR MVC ==========
+try:
+    # Ajouter le chemin des contrôleurs
+    controllers_path = os.path.join(project_root, "controllers")
+    if os.path.exists(controllers_path):
+        sys.path.insert(0, controllers_path)
+    
+    # Importer le contrôleur
+    from main_controller import get_controller
+    
+    # Initialiser le contrôleur
+    controller = get_controller()
+    CONTROLLER_AVAILABLE = True
+    
+    # Import de la configuration
+    try:
+        from config import get_output_path
+        CONFIG_AVAILABLE = True
+    except:
+        CONFIG_AVAILABLE = False
+        
+    print("✅ Contrôleur MVC chargé avec succès")
+    
+except ImportError as e:
+    print(f"⚠️ Contrôleur non disponible: {e}")
+    CONTROLLER_AVAILABLE = False
+    CONFIG_AVAILABLE = False
+    controller = None
+
+
+
+
 
 # ========== CONFIGURATION OBLIGATOIRE ==========
 st.set_page_config(
@@ -55,10 +92,17 @@ def load_module(module_name, class_name=None):
         print(f"[DEBUG] Erreur chargement {module_name}.{class_name}: {e}")
         return None
 
+
+
+
 # ========== CHARGER LES MODULES ==========
 ImageManager = None
 ImageProcessor = None
 OCREngine = None
+PostProcessor = None
+LanguageDetector = None
+TypeDetector = None
+QualityAnalyzer = None
 
 # DEBUG: Afficher les fichiers disponibles
 models_dir = os.path.join(project_root, "models")
@@ -71,16 +115,14 @@ if os.path.exists(models_dir):
 
 # CHARGEMENT CORRIGÉ pour img_manager.py
 try:
-    # VOTRE FICHIER S'APPELLE img_manager.py
     ImageManager = load_module("img_manager", "ImageManager")
     if ImageManager is None:
-        # Essayer sans majuscule
         ImageManager = load_module("img_manager", "ImageManager".lower())
 except Exception as e:
     print(f"[DEBUG] Erreur ImageManager: {e}")
     ImageManager = None
 
-# Charger ImageProcessor (garder le même nom)
+# Charger ImageProcessor
 try:
     ImageProcessor = load_module("image_processor", "ImageProcessor")
     if ImageProcessor is None:
@@ -98,28 +140,68 @@ except Exception as e:
     print(f"[DEBUG] Erreur OCREngine: {e}")
     OCREngine = None
 
+# Charger PostProcessor (nouveau module)
+try:
+    PostProcessor = load_module("post_processor", "PostProcessor")
+    if PostProcessor is None:
+        PostProcessor = load_module("post_processor", "PostProcessor".lower())
+except Exception as e:
+    print(f"[DEBUG] Erreur PostProcessor: {e}")
+    PostProcessor = None
+
+# Charger LanguageDetector (nouveau module)
+try:
+    LanguageDetector = load_module("Language_Detector", "LanguageDetector")
+    if LanguageDetector is None:
+        LanguageDetector = load_module("Language_Detector", "LanguageDetector".lower())
+except Exception as e:
+    print(f"[DEBUG] Erreur LanguageDetector: {e}")
+    LanguageDetector = None
+
+# Charger TypeDetector (nouveau module)
+try:
+    TypeDetector = load_module("type_detector", "TypeDetector")
+    if TypeDetector is None:
+        TypeDetector = load_module("type_detector", "TypeDetector".lower())
+except Exception as e:
+    print(f"[DEBUG] Erreur TypeDetector: {e}")
+    TypeDetector = None
+
+# Charger QualityAnalyzer (nouveau module)
+try:
+    QualityAnalyzer = load_module("quality_analyzer", "QualityAnalyzer")
+    if QualityAnalyzer is None:
+        QualityAnalyzer = load_module("quality_analyzer", "QualityAnalyzer".lower())
+except Exception as e:
+    print(f"[DEBUG] Erreur QualityAnalyzer: {e}")
+    QualityAnalyzer = None
+
 # Vérifier les modules de stats
 try:
-    # Essayer différents noms pour les statistiques
     StatisticsCalculator = load_module("statistics", "StatisticsCalculator")
-    if StatisticsCalculator is None:
-        StatisticsCalculator = load_module("statistics", "OCRStatistics")
-    
     PerformanceTracker = load_module("performance_tracker", "PerformanceTracker")
     STATS_AVAILABLE = StatisticsCalculator is not None or PerformanceTracker is not None
 except:
     STATS_AVAILABLE = False
 
-# Déterminer si les modules sont disponibles
+# Déterminer si les modules de base sont disponibles
 MODULES_AVAILABLE = all([ImageManager, ImageProcessor, OCREngine])
 
-# Debug dans la sidebar
+# Debug dans la sidebar - AJOUTER LES NOUVEAUX MODULES
 st.sidebar.markdown("---")
 with st.sidebar.expander("🔍 Debug Modules"):
     st.write(f"**ImageManager:** {'✅' if ImageManager else '❌'}")
     st.write(f"**ImageProcessor:** {'✅' if ImageProcessor else '❌'}")
     st.write(f"**OCREngine:** {'✅' if OCREngine else '❌'}")
+    st.write(f"**PostProcessor:** {'✅' if PostProcessor else '❌'}")
+    st.write(f"**LanguageDetector:** {'✅' if LanguageDetector else '❌'}")
+    st.write(f"**TypeDetector:** {'✅' if TypeDetector else '❌'}")
+    st.write(f"**QualityAnalyzer:** {'✅' if QualityAnalyzer else '❌'}")
     st.write(f"**STATS_AVAILABLE:** {'✅' if STATS_AVAILABLE else '❌'}")
+
+
+
+
 
 # ========== FONCTIONS D'AFFICHAGE ==========
 def show_home_page():
@@ -263,6 +345,7 @@ def show_home_page():
                 else:
                     st.write(f"Dossier models/ n'existe pas: {models_dir}")
 
+
 def show_simple_processing():
     """Page de traitement simple"""
     st.title("🔍 Traitement Simple d'Image")
@@ -351,7 +434,10 @@ def show_simple_processing():
             with col2:
                 auto_deskew = st.checkbox("Redresser automatiquement", value=True)
                 binarize = st.checkbox("Binarisation", value=True)
-                language = st.selectbox("Langue", ["fra", "eng", "spa", "deu"], index=0)
+                
+                # MODIFICATION ICI : Ajout de la détection automatique
+                language = st.selectbox("Langue", ["fra", "eng", "ara", "spa", "deu"], index=0)
+                auto_detect = st.checkbox("Détection automatique de la langue", value=True)
             
             if st.button("🚀 Exécuter l'OCR", type="primary"):
                 with st.spinner("Traitement en cours..."):
@@ -390,7 +476,27 @@ def show_simple_processing():
                         else:
                             st.error("Module de prétraitement non disponible")
                             return
-                        
+
+                        # 2b. Analyse qualité si disponible
+                        if QualityAnalyzer:
+                            try:
+                                quality_checker = QualityAnalyzer()
+                                quality_score = quality_checker.analyze(img_array)
+                                st.session_state.quality_score = quality_score
+                                st.info(f"📊 Score de qualité: {quality_score:.1f}/100")
+                            except:
+                                pass
+
+                        # 2c. Détection de type si disponible
+                        if TypeDetector:
+                            try:
+                                type_checker = TypeDetector()
+                                doc_type = type_checker.detect(img_array)
+                                st.session_state.doc_type = doc_type
+                                st.info(f"📄 Type de document: {doc_type}")
+                            except:
+                                pass
+
                         # 3. OCR
                         if OCREngine:
                             ocr = OCREngine()
@@ -399,7 +505,31 @@ def show_simple_processing():
                                 import numpy as np
                                 img_array = np.array(img_array)
                             
-                            results = ocr.extract_text_with_confidence(img_array, language=language)
+                            # Détection automatique de la langue si disponible ET activée
+                            detected_lang = language  # Par défaut utiliser la langue sélectionnée
+                            
+                            if LanguageDetector and auto_detect:
+                                try:
+                                    lang_detector = LanguageDetector()
+                                    detected_lang = lang_detector.detect(img_array)
+                                    st.info(f"🌐 Langue détectée automatiquement: {detected_lang}")
+                                except:
+                                    pass
+                            
+                            # Extraction OCR avec la langue détectée ou sélectionnée
+                            results = ocr.extract_text_with_confidence(img_array, language=detected_lang)
+                            
+                            # Post-traitement si disponible
+                            if PostProcessor and results.get('text'):
+                                try:
+                                    post_processor = PostProcessor()
+                                    processed_text = post_processor.correct_ocr_errors(results['text'], language=detected_lang)
+                                    if processed_text:
+                                        results['text'] = processed_text
+                                        results['post_processed'] = True
+                                except:
+                                    pass
+                            
                             st.session_state.ocr_results = results
                             st.success("✅ Traitement terminé!")
                             
@@ -425,62 +555,224 @@ def show_simple_processing():
             with col1:
                 st.text_area("📝 Texte extrait", 
                            results.get('text', 'Aucun texte extrait'),
-                           height=300)
+                           height=300,
+                           key="result_text_area")
             
             with col2:
                 st.metric("Confiance", f"{results.get('average_confidence', 0):.1f}%")
                 st.metric("Nombre de mots", results.get('word_count', 0))
                 st.metric("Temps", f"{results.get('processing_time', 0):.2f}s")
                 
+                # Afficher les informations supplémentaires si disponibles
+                if 'quality_score' in st.session_state:
+                    st.metric("Qualité", f"{st.session_state.quality_score:.1f}/100")
+                
+                if 'doc_type' in st.session_state:
+                    st.metric("Type", st.session_state.doc_type)
+                
+                if results.get('post_processed', False):
+                    st.success("✓ Post-traitement appliqué")
+                
                 # Boutons d'export
                 st.download_button(
                     "💾 Télécharger (.txt)",
                     results.get('text', ''),
                     file_name="resultat_ocr.txt",
-                    mime="text/plain"
+                    mime="text/plain",
+                    key="download_txt_button"
                 )
                 
-                if st.button("📊 Voir les détails"):
+                if st.button("📊 Voir les détails", key="view_details_button"):
                     with st.expander("Détails de l'extraction"):
                         if 'detailed_data' in results:
                             import pandas as pd
                             df = pd.DataFrame(results['detailed_data'])
                             st.dataframe(df.head())
 
+
+
+
+
 def show_batch_processing():
-    """Page de traitement par lot"""
+    """Page de traitement par lot - VERSION AVEC CONTRÔLEUR"""
     st.title("📊 Traitement par Lot d'Images")
     st.markdown("---")
     
-    if not MODULES_AVAILABLE:
-        st.error("❌ Modules OCR non disponibles")
-        return
+    # Indicateur de mode
+    if CONTROLLER_AVAILABLE:
+        st.success("✅ Mode contrôleur MVC actif")
+    else:
+        st.warning("⚠️ Mode démo sans contrôleur")
     
-    st.info("Cette fonctionnalité est en cours de développement")
+    # Deux colonnes comme dans votre interface précédente
+    col_left, col_right = st.columns([1, 1], gap="large")
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Fonctionnalités prévues")
-        st.write("""
-        - Téléchargement multiple d'images
-        - Traitement parallélisé
-        - Export des résultats en batch
-        - Statistiques comparatives
-        - Rapport PDF généré automatiquement
+    with col_left:
+        st.markdown("<h3 style='color: #000;'> 📁 Sélectionner un dossier d'images</h3>", unsafe_allow_html=True)
+        
+        # Information importante
+        st.info("""
+        **Instructions :**
+        1. Créez un dossier sur votre Bureau (ex: `C:\\Users\\HP\\Desktop\\images`)
+        2. Ajoutez-y vos images (PNG, JPG, JPEG, TIFF, BMP)
+        3. Entrez le chemin complet ci-dessous
         """)
+        
+        # Champ de saisie du chemin
+        folder_path = st.text_input(
+            "Chemin du dossier",
+            placeholder=r"C:\Users\HP\Desktop\images",
+            help="Entrez le chemin complet SANS les guillemets",
+            key="batch_folder_input"
+        )
+        
+        # Vérification en temps réel
+        if folder_path:
+            # Nettoyer le chemin
+            clean_path = folder_path.strip().strip('"').strip("'")
+            
+            if os.path.exists(clean_path):
+                st.success(f"✅ Dossier trouvé: `{clean_path}`")
+                
+                # Compter les images
+                image_extensions = ['.png', '.jpg', '.jpeg', '.tiff', '.bmp']
+                image_files = []
+                
+                try:
+                    for file in os.listdir(clean_path):
+                        if any(file.lower().endswith(ext) for ext in image_extensions):
+                            image_files.append(file)
+                    
+                    if image_files:
+                        st.info(f"📸 {len(image_files)} image(s) détectée(s)")
+                        
+                        # Sauvegarder dans session state
+                        st.session_state.batch_folder = clean_path
+                        st.session_state.batch_images_count = len(image_files)
+                    else:
+                        st.warning("⚠️ Aucune image trouvée dans ce dossier")
+                        st.session_state.batch_folder = None
+                        
+                except Exception as e:
+                    st.error(f"Erreur de lecture: {e}")
+                    st.session_state.batch_folder = None
+            else:
+                st.error(f"❌ Dossier introuvable: `{clean_path}`")
+                st.session_state.batch_folder = None
+        
+        # Options de traitement
+        with st.expander("⚙️ Options de traitement par lot", expanded=True):
+            col_opt1, col_opt2 = st.columns(2)
+            
+            with col_opt1:
+                batch_language = st.selectbox(
+                    "Langue",
+                    ["fra", "eng", "ara"],
+                    index=0,
+                    key="batch_lang"
+                )
+                save_individual = st.checkbox("Fichiers .txt individuels", value=True)
+            
+            with col_opt2:
+                batch_preprocessing = st.checkbox("Prétraitement", value=True)
+                create_summary = st.checkbox("Fichier récapitulatif", value=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Bouton de traitement
+        if st.button("🚀 Traiter le dossier", type="primary", use_container_width=True):
+            if "batch_folder" not in st.session_state or not st.session_state.batch_folder:
+                st.error("❌ Veuillez d'abord sélectionner un dossier valide")
+            else:
+                with st.spinner("🔍 Traitement en cours..."):
+                    try:
+                        # Options de traitement
+                        options = {
+                            'language': batch_language,
+                            'preprocessing': batch_preprocessing,
+                            'save_individual': save_individual,
+                            'create_summary': create_summary
+                        }
+                        
+                        # Utiliser le contrôleur si disponible
+                        if CONTROLLER_AVAILABLE and controller:
+                            result = controller.process_batch(st.session_state.batch_folder, options)
+                            
+                            if result["success"]:
+                                st.session_state.batch_results = result["data"]["results"]
+                                if "summary" in result["data"]:
+                                    st.session_state.batch_summary = result["data"]["summary"]
+                                
+                                st.success(f"✅ {len(result['data']['results'])} images traitées avec succès!")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Erreur: {result['error']}")
+                        
+                        else:
+                            # Mode démo sans contrôleur
+                            st.error("❌ Contrôleur non disponible")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Erreur lors du traitement: {str(e)}")
     
-    with col2:
-        st.subheader("Progression")
-        st.write("**État:** En développement")
-        st.write("**Équipe:** Personne 4 (Interface)")
-        st.write("**Priorité:** Haute")
-        
-        # Barre de progression simulée
-        st.progress(0.6, text="Développement à 60%")
-        
-        if st.button("🧪 Tester fonctionnalité"):
-            st.info("Fonctionnalité bientôt disponible!")
+    with col_right:
+        # Section résultats
+        if "batch_results" in st.session_state and st.session_state.batch_results:
+            results = st.session_state.batch_results
+            
+            st.markdown("### 📊 Résultats du traitement")
+            
+            # Métriques globales
+            col_m1, col_m2, col_m3 = st.columns(3)
+            
+            with col_m1:
+                st.metric("Images", len(results))
+            
+            with col_m2:
+                avg_conf = sum(r['confidence'] for r in results) / len(results)
+                st.metric("Confiance moy.", f"{avg_conf:.1f}%")
+            
+            with col_m3:
+                total_words = sum(r['word_count'] for r in results)
+                st.metric("Mots totaux", f"{total_words:,}")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Liste détaillée
+            st.markdown("#### 📄 Fichiers traités")
+            
+            for idx, r in enumerate(results):
+                with st.expander(f"📄 {r['filename']} - Confiance: {r['confidence']:.1f}%"):
+                    st.text_area(
+                        "Texte",
+                        r['text'],
+                        height=200,
+                        label_visibility="collapsed",
+                        key=f"batch_{r['filename']}"
+                    )
+                    
+                    st.download_button(
+                        "💾 Télécharger",
+                        r['text'],
+                        file_name=f"{Path(r['filename']).stem}.txt",
+                        mime="text/plain",
+                        key=f"dl_{r['filename']}"
+                    )
+            
+            # Télécharger récapitulatif
+            if 'batch_summary' in st.session_state:
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.download_button(
+                    "📥 Télécharger le récapitulatif complet",
+                    st.session_state.batch_summary,
+                    file_name="recapitulatif_batch.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+        else:
+            st.info("👈 Sélectionnez un dossier et cliquez sur 'Traiter le dossier'")
+
+
 
 def show_performance():
     """Page de statistiques"""
