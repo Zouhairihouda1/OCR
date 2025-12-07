@@ -381,17 +381,18 @@ def save_text_to_file(text, filename, subfolder=""):
     
     return filepath
 
-def process_folder(folder_path):
-    """Traite un dossier complet d'images"""
+def get_image_files(folder_path):
+    """Récupère tous les fichiers images d'un dossier"""
     folder = Path(folder_path)
-    extensions = ['*.png', '*.jpg', '*.jpeg', '*.tiff', '*.bmp']
+    extensions = ['*.png', '*.jpg', '*.jpeg', '*.tiff', '*.bmp', '*.gif']
     image_files = []
     
     for ext in extensions:
         image_files.extend(folder.glob(ext))
         image_files.extend(folder.glob(ext.upper()))
     
-    return image_files
+    return sorted(image_files)
+
 
 # ========== INITIALISATION SESSION ==========
 if 'history' not in st.session_state:
@@ -574,7 +575,7 @@ def main():
             # Bouton de traitement
             if st.button("🚀 Traiter le dossier", type="primary", use_container_width=True):
                 if folder_path and os.path.isdir(folder_path):
-                    image_files = process_folder(folder_path, {})
+                    image_files = get_image_files(folder_path)
                     
                     if image_files:
                         st.markdown("### 🔄 Traitement en cours...")
