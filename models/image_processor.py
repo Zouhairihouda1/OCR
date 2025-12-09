@@ -121,6 +121,45 @@ class ImageProcessor:
         except Exception as e:
             self.logger.error(f"Erreur conversion niveaux de gris: {e}")
             return image
+
+
+
+
+
+
+    def preprocess(self, image, options=None):
+        """
+        Méthode simplifiée pour app.py
+        
+        Args:
+            image: PIL Image ou numpy array
+            options: dict avec 'preprocessing', 'language', etc.
+        
+        Returns:
+            PIL Image prétraitée
+        """
+        if options is None:
+            options = {}
+        
+        # Choisir configuration selon les options
+        if options.get('preprocessing', True):
+            # Mode haute qualité activé
+            config = PreprocessingConfig.for_high_quality_output()
+        else:
+            # Mode basique
+            config = PreprocessingConfig()
+            config.grayscale = False
+            config.binarization_method = None
+            config.denoise = False
+        
+        # Appliquer le prétraitement
+        return self.apply_all_preprocessing_high_quality(image, config)
+
+
+
+
+
+
     
     def apply_binarization(self, image, method='otsu_high_quality', threshold=127):
         """
