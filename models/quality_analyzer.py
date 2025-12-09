@@ -534,7 +534,18 @@ class QualityAnalyzer:
             recommendations.sort(key=lambda x: priority_order.get(x['priority'], 0), reverse=True)
             
             return recommendations
-            
+
+
+           
+     def analyze(self, image):
+        """
+        Alias simplifié pour app.py
+        Retourne le rapport de qualité complet
+        """
+            return self.generate_quality_report(image)
+
+
+
         except Exception as e:
             self.logger.error(f"Erreur génération recommandations: {e}")
             return [{
