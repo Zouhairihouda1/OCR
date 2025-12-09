@@ -1,6 +1,6 @@
+
 """
-Processeur d'images pour le prétraitement OCR - VERSION MULTILANGUE
-Optimisé pour: Français, Anglais, Arabe
+Processeur d'images pour le prétraitement OCR - VERSION QUALITÉ MAXIMUM
 Développé par [HiBa saaD] - Personne 2
 """
 import numpy as np
@@ -22,7 +22,7 @@ class PreprocessingConfig:
     def __init__(self):
         # Paramètres généraux - OPTIMISÉS POUR QUALITÉ MAX
         self.grayscale = True
-        self.binarization_method = 'otsu_high_quality'  # Ancien paramètre conservé
+        self.binarization_method = 'otsu_high_quality'  # Nouvelle méthode
         self.denoise = True
         self.contrast_factor = 2.0  # Augmenté
         self.deskew = True
@@ -32,12 +32,7 @@ class PreprocessingConfig:
         self.sharpen = True  # Nouveau : netteté
         self.high_resolution_mode = True  # Mode haute résolution
         
-        # NOUVEAUX PARAMÈTRES POUR MULTILANGUE
-        self.language = 'auto'  # 'auto', 'arabic', 'latin'
-        self.preserve_diacritics = True  # Important pour l'arabe
-        self.text_direction = 'auto'  # 'auto', 'rtl', 'ltr'
-        
-        # Paramètres spécifiques - OPTIMISÉS (anciens paramètres conservés)
+        # Paramètres spécifiques - OPTIMISÉS
         self.adaptive_threshold_block = 25  # Augmenté pour meilleure qualité
         self.adaptive_threshold_c = 3
         self.median_filter_size = 5
@@ -61,7 +56,6 @@ class PreprocessingConfig:
         config.high_resolution_mode = True
         config.median_filter_size = 3  # Plus fin pour haute résolution
         config.sharpen_factor = 1.8
-        config.language = 'auto'  # Détection automatique
         return config
     
     @classmethod
@@ -76,7 +70,6 @@ class PreprocessingConfig:
         config.resize_factor = 3.5
         config.sharpen = True
         config.sharpen_factor = 2.0
-        config.language = 'latin'  # Spécifique pour latin
         return config
     
     @classmethod
@@ -92,188 +85,17 @@ class PreprocessingConfig:
         config.median_filter_size = 7
         config.adaptive_threshold_block = 31
         config.sharpen = True
-        config.language = 'auto'  # Détection automatique
         return config
-    
-    @classmethod
-    def for_arabic_text(cls):
-        """
-        NOUVELLE CONFIGURATION : Optimisée pour le texte arabe
-        """
-        config = cls()
-        config.binarization_method = 'adaptive_soft'
-        config.contrast_factor = 2.2
-        config.denoise = True
-        config.resize_factor = 4.0
-        config.sharpen = True
-        config.sharpen_factor = 1.5
-        config.language = 'arabic'  # Spécifique pour arabe
-        config.preserve_diacritics = True
-        config.text_direction = 'rtl'
-        config.median_filter_size = 3
-        config.adaptive_threshold_block = 21
-        config.adaptive_threshold_c = 4
-        return config
-
-
-class ArabicTextProcessor:
-    """
-    Processeur spécialisé pour le texte arabe
-    """
-    
-    def __init__(self):
-        self.logger = logging.getLogger(__name__)
-    
-    def detect_arabic_text_features(self, image):
-        """
-        Détecte les caractéristiques spécifiques au texte arabe
-        """
-        try:
-            if isinstance(image, Image.Image):
-                img_array = np.array(image.convert('L'))
-            else:
-                img_array = image.copy()
-                if len(img_array.shape) == 3:
-                    if CV2_AVAILABLE:
-                        img_array = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
-                    else:
-                        img_array = np.dot(img_array[...,:3], [0.299, 0.587, 0.114])
-            
-            # Calculer les projections
-            horizontal_projection = np.sum(img_array < 128, axis=1)
-            vertical_projection = np.sum(img_array < 128, axis=0)
-            
-            # Calculer les variances
-            vertical_variance = np.var(vertical_projection)
-            horizontal_variance = np.var(horizontal_projection)
-            
-            # Ratio caractéristique
-            arabic_ratio = vertical_variance / (horizontal_variance + 1e-10)
-            
-            # Détection RTL (Right-to-Left)
-            left_density = np.sum(vertical_projection[:len(vertical_projection)//3])
-            right_density = np.sum(vertical_projection[2*len(vertical_projection)//3:])
-            rtl_ratio = right_density / (left_density + 1e-10)
-            
-            is_arabic_likely = (arabic_ratio > 1.2) or (rtl_ratio > 1.5)
-            
-            return {
-                'is_arabic_likely': is_arabic_likely,
-                'arabic_ratio': arabic_ratio,
-                'rtl_ratio': rtl_ratio,
-                'confidence': min(arabic_ratio / 2.0, 1.0)
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Erreur détection arabe: {e}")
-            return {'is_arabic_likely': False, 'confidence': 0}
-    
-    def enhance_arabic_text(self, image):
-        """
-        Améliore spécifiquement le texte arabe
-        """
-        try:
-            if isinstance(image, Image.Image):
-                img_array = np.array(image.convert('L'))
-                return_pil = True
-            else:
-                img_array = image.copy()
-                return_pil = False
-            
-            # 1. CLAHE pour le contraste local (très important pour l'arabe)
-            if CV2_AVAILABLE:
-                clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
-                enhanced = clahe.apply(img_array)
-            else:
-                enhanced = img_array
-            
-            # 2. Renforcement des contours horizontaux
-            if CV2_AVAILABLE:
-                kernel_horizontal = np.array([[-1, -1, -1],
-                                              [2, 2, 2],
-                                              [-1, -1, -1]]) / 2
-                enhanced = cv2.filter2D(enhanced, -1, kernel_horizontal)
-            
-            # 3. Filtre bilatéral pour préserver les diacritiques
-            if CV2_AVAILABLE:
-                enhanced = cv2.bilateralFilter(enhanced, 5, 50, 50)
-            
-            # 4. Amélioration des diacritiques
-            enhanced = self._enhance_diacritics(enhanced)
-            
-            if return_pil:
-                return Image.fromarray(enhanced)
-            return enhanced
-            
-        except Exception as e:
-            self.logger.error(f"Erreur amélioration arabe: {e}")
-            return image
-    
-    def _enhance_diacritics(self, image_array):
-        """
-        Améliore les diacritiques arabes
-        """
-        try:
-            # Seuillage adaptatif pour les petits points
-            if CV2_AVAILABLE:
-                binary = cv2.adaptiveThreshold(
-                    image_array, 255,
-                    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    cv2.THRESH_BINARY_INV, 15, 3
-                )
-                
-                # Morphologie légère pour renforcer les diacritiques
-                kernel = np.ones((1, 1), np.uint8)
-                binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
-                binary = cv2.dilate(binary, kernel, iterations=1)
-                
-                return binary
-            else:
-                return image_array
-                
-        except Exception as e:
-            self.logger.error(f"Erreur amélioration diacritiques: {e}")
-            return image_array
 
 
 class ImageProcessor:
     """
-    Gestionnaire principal du prétraitement des images pour l'OCR - VERSION MULTILANGUE
-    Compatible avec l'ancienne interface
+    Gestionnaire principal du prétraitement des images pour l'OCR - VERSION QUALITÉ MAX
     """
     
     def __init__(self, config=None):
         self.logger = logging.getLogger(__name__)
         self.config = config if config else PreprocessingConfig.for_high_quality_output()
-        self.arabic_processor = ArabicTextProcessor()
-    
-    def detect_language(self, image):
-        """
-        Détecte la langue du texte dans l'image
-        """
-        try:
-            # Si la langue est spécifiée dans la config, l'utiliser
-            if self.config.language != 'auto':
-                return self.config.language
-            
-            # Sinon, détecter automatiquement
-            if isinstance(image, Image.Image):
-                gray_image = image.convert('L')
-            else:
-                gray_image = self.convert_to_grayscale(image)
-            
-            arabic_features = self.arabic_processor.detect_arabic_text_features(gray_image)
-            
-            if arabic_features['confidence'] > 0.6:
-                return 'arabic'
-            else:
-                return 'latin'
-                
-        except Exception as e:
-            self.logger.error(f"Erreur détection langue: {e}")
-            return 'latin'
-    
-    # ========== MÉTHODES EXISTANTES (COMPATIBILITÉ) ==========
     
     def convert_to_grayscale(self, image):
         """
@@ -290,6 +112,7 @@ class ImageProcessor:
                     if CV2_AVAILABLE:
                         return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
                     else:
+                        # Conversion haute qualité
                         return np.dot(image[...,:3], [0.299, 0.587, 0.114]).astype(np.uint8)
                 return image
             
@@ -299,133 +122,73 @@ class ImageProcessor:
         except Exception as e:
             self.logger.error(f"Erreur conversion niveaux de gris: {e}")
             return image
-
-
-
-
-
-
-    def preprocess(self, image, options=None):
-        """
-        Méthode simplifiée pour app.py
-        
-        Args:
-            image: PIL Image ou numpy array
-            options: dict avec 'preprocessing', 'language', etc.
-        
-        Returns:
-            PIL Image prétraitée
-        """
-        if options is None:
-            options = {}
-        
-        # Choisir configuration selon les options
-        if options.get('preprocessing', True):
-            # Mode haute qualité activé
-            config = PreprocessingConfig.for_high_quality_output()
-        else:
-            # Mode basique
-            config = PreprocessingConfig()
-            config.grayscale = False
-            config.binarization_method = None
-            config.denoise = False
-        
-        # Appliquer le prétraitement
-        return self.apply_all_preprocessing_high_quality(image, config)
-
-
-
-
-
-
     
-    def apply_binarization(self, image, method=None, threshold=127):
+    def apply_binarization(self, image, method='otsu_high_quality', threshold=127):
         """
-        NOUVELLE VERSION : Applique une binarisation adaptée à la langue
+        Applique une binarisation HAUTE QUALITÉ à l'image
         """
         try:
-            if method is None:
-                method = self.config.binarization_method
-            
-            # Détecter la langue
-            language = self.detect_language(image)
-            
             if isinstance(image, Image.Image):
                 img_array = np.array(image)
             else:
                 img_array = image.copy()
             
-            # Convertir en niveaux de gris
+            # Vérifier que l'image est en niveaux de gris
             if len(img_array.shape) == 3:
                 img_array = self.convert_to_grayscale(img_array)
             
-            # Binarisation adaptée à la langue
-            if language == 'arabic':
-                # Méthode optimisée pour l'arabe
+            # NOUVELLE MÉTHODE : Otsu haute qualité avec post-traitement
+            if method == 'otsu_high_quality':
                 if CV2_AVAILABLE:
-                    # CLAHE d'abord
-                    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-                    enhanced = clahe.apply(img_array)
-                    
-                    # Seuillage adaptatif doux
-                    binary = cv2.adaptiveThreshold(
-                        enhanced, 255,
-                        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                        cv2.THRESH_BINARY_INV, 21, 4
-                    )
-                    
-                    # Morphologie légère pour l'arabe
-                    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+                    # Otsu standard
+                    _, binary = cv2.threshold(img_array, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                    # Post-traitement : fermeture pour combler les petits trous
+                    kernel = np.ones((2, 2), np.uint8)
                     binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+                    # Érosion légère pour affiner
+                    binary = cv2.erode(binary, kernel, iterations=1)
                 else:
-                    binary = self._adaptive_binary_arabic(img_array)
+                    binary = self._high_quality_otsu(img_array)
+            
+            elif method == 'adaptive_high_quality':
+                if CV2_AVAILABLE:
+                    # Seuillage adaptatif gaussien haute qualité
+                    binary = cv2.adaptiveThreshold(
+                        img_array, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                        cv2.THRESH_BINARY, 31, 5  # Paramètres optimisés
+                    )
+                else:
+                    binary = self._adaptive_threshold_manual(img_array)
+            
+            elif method == 'otsu':
+                if CV2_AVAILABLE:
+                    _, binary = cv2.threshold(img_array, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                else:
+                    binary = self._simple_otsu(img_array)
+            
+            elif method == 'adaptive':
+                if CV2_AVAILABLE:
+                    binary = cv2.adaptiveThreshold(
+                        img_array, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                        cv2.THRESH_BINARY, self.config.adaptive_threshold_block, 
+                        self.config.adaptive_threshold_c
+                    )
+                else:
+                    binary = (img_array > np.mean(img_array)) * 255
+            
+            elif method == 'binary':
+                if CV2_AVAILABLE:
+                    _, binary = cv2.threshold(img_array, threshold, 255, cv2.THRESH_BINARY)
+                else:
+                    binary = (img_array > threshold) * 255
+            
             else:
-                # Méthodes originales pour le latin
-                if method == 'otsu_high_quality':
-                    if CV2_AVAILABLE:
-                        _, binary = cv2.threshold(img_array, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                        kernel = np.ones((2, 2), np.uint8)
-                        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
-                    else:
-                        binary = self._simple_otsu(img_array)
-                
-                elif method == 'adaptive_high_quality':
-                    if CV2_AVAILABLE:
-                        binary = cv2.adaptiveThreshold(
-                            img_array, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                            cv2.THRESH_BINARY, 31, 5
-                        )
-                    else:
-                        binary = (img_array > np.mean(img_array)) * 255
-                
-                elif method == 'otsu':
-                    if CV2_AVAILABLE:
-                        _, binary = cv2.threshold(img_array, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                    else:
-                        binary = self._simple_otsu(img_array)
-                
-                elif method == 'adaptive':
-                    if CV2_AVAILABLE:
-                        binary = cv2.adaptiveThreshold(
-                            img_array, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                            cv2.THRESH_BINARY, self.config.adaptive_threshold_block, 
-                            self.config.adaptive_threshold_c
-                        )
-                    else:
-                        binary = (img_array > np.mean(img_array)) * 255
-                
-                elif method == 'binary':
-                    if CV2_AVAILABLE:
-                        _, binary = cv2.threshold(img_array, threshold, 255, cv2.THRESH_BINARY)
-                    else:
-                        binary = (img_array > threshold) * 255
-                
-                else:
-                    binary = img_array
+                binary = img_array
             
             # Inverser pour OCR (texte blanc sur fond noir)
             binary = 255 - binary
             
+            # Convertir en image PIL si l'entrée était PIL
             if isinstance(image, Image.Image):
                 return Image.fromarray(binary.astype(np.uint8))
             return binary.astype(np.uint8)
@@ -434,35 +197,12 @@ class ImageProcessor:
             self.logger.error(f"Erreur binarisation ({method}): {e}")
             return image
     
-    def _adaptive_binary_arabic(self, image_array):
+    def _high_quality_otsu(self, image):
         """
-        Binarisation adaptative manuelle pour l'arabe
+        Otsu haute qualité avec post-traitement manuel
         """
-        result = np.zeros_like(image_array)
-        block_size = 21
-        c = 4
-        
-        for i in range(image_array.shape[0]):
-            for j in range(image_array.shape[1]):
-                i_start = max(0, i - block_size//2)
-                i_end = min(image_array.shape[0], i + block_size//2 + 1)
-                j_start = max(0, j - block_size//2)
-                j_end = min(image_array.shape[1], j + block_size//2 + 1)
-                
-                local_region = image_array[i_start:i_end, j_start:j_end]
-                
-                if len(local_region) > 0:
-                    local_mean = np.mean(local_region)
-                    if image_array[i, j] < local_mean - c:
-                        result[i, j] = 255
-        
-        return result
-    
-    def _simple_otsu(self, image_array):
-        """
-        Implémentation simple d'Otsu
-        """
-        hist, _ = np.histogram(image_array.flatten(), 256, [0,256])
+        # Calcul Otsu standard
+        hist, _ = np.histogram(image.flatten(), 256, [0,256])
         prob = hist / hist.sum()
         
         max_var = 0
@@ -484,38 +224,52 @@ class ImageProcessor:
                 max_var = var
                 optimal_threshold = t
         
-        binary = (image_array < optimal_threshold) * 255
+        # Appliquer le seuil avec marge de sécurité
+        binary = (image < optimal_threshold * 0.9) * 255
+        
         return binary.astype(np.uint8)
+    
+    def _adaptive_threshold_manual(self, image, block_size=31, c=5):
+        """
+        Seuillage adaptatif manuel de haute qualité
+        """
+        result = np.zeros_like(image)
+        half_block = block_size // 2
+        
+        for i in range(image.shape[0]):
+            for j in range(image.shape[1]):
+                # Définir la région locale
+                i_start = max(0, i - half_block)
+                i_end = min(image.shape[0], i + half_block + 1)
+                j_start = max(0, j - half_block)
+                j_end = min(image.shape[1], j + half_block + 1)
+                
+                # Calculer la moyenne locale
+                local_mean = np.mean(image[i_start:i_end, j_start:j_end])
+                
+                # Appliquer le seuil adaptatif
+                if image[i, j] > local_mean - c:
+                    result[i, j] = 255
+        
+        return result
     
     def apply_noise_reduction(self, image, method='median_high_quality'):
         """
-        Réduction du bruit HAUTE QUALITÉ avec support multilingue
+        Réduction du bruit HAUTE QUALITÉ
         """
         try:
-            # Détecter la langue
-            language = self.detect_language(image)
-            
-            if language == 'arabic':
-                # Méthode douce pour l'arabe
-                method = 'bilateral_high_quality'
-            
             if isinstance(image, Image.Image):
                 if method == 'median_high_quality':
+                    # Filtre médian PIL
                     return image.filter(ImageFilter.MedianFilter(size=3))
                 elif method == 'gaussian_high_quality':
+                    # Filtre gaussien léger
                     return image.filter(ImageFilter.GaussianBlur(radius=0.5))
                 elif method == 'bilateral_pil':
+                    # Approximation avec un flou suivi d'un sharpening
                     blurred = image.filter(ImageFilter.GaussianBlur(radius=1))
                     enhancer = ImageEnhance.Sharpness(blurred)
                     return enhancer.enhance(1.5)
-                elif method == 'bilateral_high_quality':
-                    # Approximation pour l'arabe
-                    img_array = np.array(image.convert('L'))
-                    if CV2_AVAILABLE:
-                        denoised = cv2.bilateralFilter(img_array, 5, 50, 50)
-                        return Image.fromarray(denoised)
-                    else:
-                        return image.filter(ImageFilter.SMOOTH_MORE)
                 else:
                     return image.filter(ImageFilter.SMOOTH_MORE)
             
@@ -525,8 +279,10 @@ class ImageProcessor:
                 elif method == 'gaussian_high_quality':
                     return cv2.GaussianBlur(image, (3, 3), 0.8)
                 elif method == 'bilateral_high_quality':
+                    # Filtre bilatéral - excellent pour préserver les bords
                     return cv2.bilateralFilter(image, 9, 50, 50)
                 elif method == 'nlmeans':
+                    # Denoising Non-local Means - TRÈS efficace mais lent
                     return cv2.fastNlMeansDenoising(image, None, 10, 7, 21)
                 else:
                     return cv2.medianBlur(image, 3)
@@ -537,55 +293,59 @@ class ImageProcessor:
             self.logger.error(f"Erreur réduction bruit: {e}")
             return image
     
-    def enhance_contrast(self, image, factor=None):
+    def enhance_contrast(self, image, factor=2.0):
         """
-        Améliore le contraste de l'image - VERSION MULTILANGUE
+        Améliore le contraste de l'image - VERSION HAUTE QUALITÉ
         """
         try:
-            if factor is None:
-                factor = self.config.contrast_factor
-            
-            # Détecter la langue
-            language = self.detect_language(image)
-            
-            if language == 'arabic':
-                # Facteur plus élevé pour l'arabe
-                factor = max(factor, 2.2)
-            
             if isinstance(image, Image.Image):
+                # Multiple techniques
                 enhancer = ImageEnhance.Contrast(image)
                 enhanced = enhancer.enhance(factor)
+                
+                # Auto-contrast supplémentaire
                 enhanced = ImageOps.autocontrast(enhanced, cutoff=2)
+                
                 return enhanced
             
             elif isinstance(image, np.ndarray):
-                if len(image.shape) == 2:
+                if len(image.shape) == 2:  # Image en niveaux de gris
                     if CV2_AVAILABLE:
-                        if language == 'arabic':
-                            # CLAHE pour l'arabe
-                            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(16,16))
-                            enhanced = clahe.apply(image)
-                            enhanced = cv2.equalizeHist(enhanced)
-                        else:
-                            # Méthode standard pour le latin
-                            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-                            enhanced = clahe.apply(image)
+                        # CLAHE avancé
+                        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(16,16))
+                        enhanced = clahe.apply(image)
+                        
+                        # Égalisation d'histogramme globale en plus
+                        enhanced = cv2.equalizeHist(enhanced)
+                        
                         return enhanced
                     else:
+                        # Égalisation manuelle avancée
                         hist, _ = np.histogram(image.flatten(), 256, [0,256])
                         cdf = hist.cumsum()
                         cdf_normalized = cdf * 255 / cdf[-1]
+                        
+                        # Transformation avec courbe gamma
                         gamma = 0.7
                         cdf_normalized = np.power(cdf_normalized / 255.0, gamma) * 255
+                        
                         return np.interp(image.flatten(), range(256), cdf_normalized).reshape(image.shape).astype(np.uint8)
-                else:
-                    if CV2_AVAILABLE and language == 'arabic':
+                
+                else:  # Image couleur
+                    if CV2_AVAILABLE:
+                        # Conversion en LAB pour meilleur contraste couleur
                         lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
                         l, a, b = cv2.split(lab)
+                        
+                        # CLAHE sur le canal L
                         clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(16,16))
                         l = clahe.apply(l)
+                        
+                        # Fusion
                         enhanced_lab = cv2.merge([l, a, b])
-                        return cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+                        enhanced = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+                        
+                        return enhanced
                     else:
                         return image
             
@@ -595,33 +355,30 @@ class ImageProcessor:
             self.logger.error(f"Erreur amélioration contraste: {e}")
             return image
     
-    def sharpen_image(self, image, factor=None):
+    def sharpen_image(self, image, factor=2.0):
         """
-        Augmente la netteté de l'image - ADAPTÉ POUR MULTILANGUE
+        Augmente la netteté de l'image
         """
         try:
-            if factor is None:
-                factor = self.config.sharpen_factor
-            
-            # Détecter la langue
-            language = self.detect_language(image)
-            
-            if language == 'arabic':
-                # Netteté plus douce pour l'arabe
-                factor = factor * 0.8
-            
             if isinstance(image, Image.Image):
+                # Filtre de netteté
                 sharpened = image.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+                
+                # Amélioration supplémentaire
                 enhancer = ImageEnhance.Sharpness(sharpened)
                 return enhancer.enhance(factor)
             
             elif isinstance(image, np.ndarray) and CV2_AVAILABLE:
+                # Netteté avec noyau
                 kernel = np.array([[-1, -1, -1],
                                    [-1,  9, -1],
                                    [-1, -1, -1]])
                 sharpened = cv2.filter2D(image, -1, kernel)
+                
+                # Ajouter un peu de flou gaussien inverse
                 blurred = cv2.GaussianBlur(sharpened, (0, 0), 3)
                 sharpened = cv2.addWeighted(sharpened, 1.5, blurred, -0.5, 0)
+                
                 return sharpened
             
             return image
@@ -635,6 +392,7 @@ class ImageProcessor:
         Redimensionne l'image en HAUTE QUALITÉ pour atteindre ~2160p
         """
         try:
+            # Calculer le facteur d'échelle pour atteindre la hauteur cible
             if isinstance(image, Image.Image):
                 current_width, current_height = image.size
             elif isinstance(image, np.ndarray):
@@ -642,30 +400,29 @@ class ImageProcessor:
             else:
                 return image
             
-            # Détecter la langue
-            language = self.detect_language(image)
-            
-            if language == 'arabic':
-                # Résolution plus élevée pour l'arabe
-                target_height = max(target_height, 2400)
-            
+            # Calculer le facteur pour atteindre ~2160p
             scale_factor = target_height / current_height
             
+            # S'assurer que le facteur est au moins 2x pour une bonne qualité
             if scale_factor < 2.0:
                 scale_factor = 2.0
-            elif scale_factor > 8.0:
+            elif scale_factor > 8.0:  # Limite pour éviter les artefacts
                 scale_factor = 8.0
             
-            self.logger.info(f"Redimensionnement pour {language}: {current_height}p -> {int(current_height * scale_factor)}p")
+            self.logger.info(f"Redimensionnement haute qualité : {current_height}p -> {int(current_height * scale_factor)}p (facteur: {scale_factor:.2f}x)")
             
             if isinstance(image, Image.Image):
                 new_width = int(current_width * scale_factor)
                 new_height = int(current_height * scale_factor)
+                
+                # Utiliser LANCZOS pour la meilleure qualité
                 return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
             
             elif isinstance(image, np.ndarray) and CV2_AVAILABLE:
                 new_width = int(current_width * scale_factor)
                 new_height = int(current_height * scale_factor)
+                
+                # INTER_CUBIC pour haute qualité, INTER_LANCZOS4 si disponible
                 if hasattr(cv2, 'INTER_LANCZOS4'):
                     return cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4)
                 else:
@@ -677,140 +434,9 @@ class ImageProcessor:
             self.logger.error(f"Erreur redimensionnement haute qualité: {e}")
             return image
     
-    def deskew_image(self, image, min_angle=None):
+    def apply_all_preprocessing_high_quality(self, image, config=None):
         """
-        Tourne l'image d'un certain angle - COMPATIBLE ANCIENNE VERSION
-        """
-        try:
-            if min_angle is None:
-                min_angle = getattr(self.config, 'deskew_min_angle', 0.2)
-            
-            if isinstance(image, Image.Image):
-                img_array = np.array(image.convert('L'))
-                return_pil = True
-            else:
-                img_array = image.copy()
-                return_pil = False
-            
-            if CV2_AVAILABLE:
-                _, binary = cv2.threshold(img_array, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-                coords = np.column_stack(np.where(binary > 0))
-                
-                if len(coords) > 0:
-                    angle = cv2.minAreaRect(coords)[-1]
-                    
-                    if angle < -45:
-                        angle = 90 + angle
-                    
-                    if abs(angle) > min_angle:
-                        (h, w) = img_array.shape[:2]
-                        center = (w // 2, h // 2)
-                        M = cv2.getRotationMatrix2D(center, angle, 1.0)
-                        rotated = cv2.warpAffine(img_array, M, (w, h), 
-                                                flags=cv2.INTER_CUBIC, 
-                                                borderMode=cv2.BORDER_REPLICATE)
-                        
-                        if return_pil:
-                            return Image.fromarray(rotated)
-                        return rotated
-            
-            return image
-            
-        except Exception as e:
-            self.logger.error(f"Erreur redressement: {e}")
-            return image
-    
-    def remove_borders(self, image, margin=20):
-        """
-        Supprime les bordures blanches excessives
-        """
-        try:
-            if isinstance(image, Image.Image):
-                img_array = np.array(image.convert('L'))
-                return_pil = True
-            else:
-                img_array = image.copy()
-                return_pil = False
-            
-            _, binary = cv2.threshold(img_array, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            binary = 255 - binary
-            
-            coords = np.column_stack(np.where(binary > 0))
-            
-            if len(coords) > 0:
-                y_min, x_min = coords.min(axis=0)
-                y_max, x_max = coords.max(axis=0)
-                
-                y_min = max(0, y_min - margin)
-                y_max = min(img_array.shape[0], y_max + margin)
-                x_min = max(0, x_min - margin)
-                x_max = min(img_array.shape[1], x_max + margin)
-                
-                cropped = img_array[y_min:y_max, x_min:x_max]
-                
-                if return_pil:
-                    return Image.fromarray(cropped)
-                return cropped
-            
-            return image
-            
-        except Exception as e:
-            self.logger.error(f"Erreur suppression bordures: {e}")
-            return image
-    
-    def get_dominant_color(self, image, k=1):
-        """
-        MÉTHODE EXISTANTE - Trouve la couleur dominante dans l'image
-        """
-        try:
-            if isinstance(image, Image.Image):
-                img_array = np.array(image)
-                if len(img_array.shape) == 3:
-                    pixels = img_array.reshape(-1, img_array.shape[2])
-                else:
-                    pixels = img_array.reshape(-1, 1)
-            
-            elif isinstance(image, np.ndarray):
-                if len(image.shape) == 3:
-                    pixels = image.reshape(-1, image.shape[2])
-                else:
-                    pixels = image.reshape(-1, 1)
-            
-            else:
-                return []
-            
-            if k == 1:
-                return [np.mean(pixels, axis=0).astype(int).tolist()]
-            
-            return []
-            
-        except Exception as e:
-            self.logger.error(f"Erreur détection couleur dominante: {e}")
-            return []
-    
-    def create_thumbnail(self, image, size=(200, 200)):
-        """
-        MÉTHODE EXISTANTE - Crée une miniature de l'image
-        """
-        try:
-            if isinstance(image, Image.Image):
-                image.thumbnail(size, Image.Resampling.LANCZOS)
-                return image
-            
-            elif isinstance(image, np.ndarray) and CV2_AVAILABLE:
-                return cv2.resize(image, size, interpolation=cv2.INTER_AREA)
-            
-            return image
-        except Exception as e:
-            self.logger.error(f"Erreur création miniature: {e}")
-            return image
-    
-    # ========== MÉTHODES PRINCIPALES ==========
-    
-    def apply_all_preprocessing(self, image, config=None):
-        """
-        ANCIENNE MÉTHODE - Applique tous les prétraitements
-        Maintenant avec support multilingue
+        Applique tous les prétraitements en HAUTE QUALITÉ
         """
         if config is None:
             config = self.config
@@ -818,70 +444,61 @@ class ImageProcessor:
         processed_image = image
         
         try:
-            # Détecter la langue
-            language = self.detect_language(processed_image)
-            self.logger.info(f"Début prétraitement - Langue détectée: {language}")
+            self.logger.info("Début du pipeline de prétraitement HAUTE QUALITÉ")
             
             # 1. Conversion en niveaux de gris
             if config.grayscale:
+                self.logger.debug("Conversion en niveaux de gris")
                 processed_image = self.convert_to_grayscale(processed_image)
             
             # 2. Correction d'inclinaison
             if config.deskew:
+                self.logger.debug("Correction d'inclinaison haute précision")
                 processed_image = self.deskew_image(processed_image, config.deskew_min_angle)
             
-            # 3. Amélioration du contraste
+            # 3. Amélioration du contraste (TRÈS IMPORTANT)
             if config.contrast_factor != 1.0:
+                self.logger.debug(f"Amélioration du contraste haute qualité (facteur: {config.contrast_factor})")
                 processed_image = self.enhance_contrast(processed_image, config.contrast_factor)
             
-            # 4. Traitement spécial pour l'arabe
-            if language == 'arabic':
-                processed_image = self.arabic_processor.enhance_arabic_text(processed_image)
-            
-            # 5. Réduction du bruit
+            # 4. Réduction du bruit (méthode avancée)
             if config.denoise:
-                if language == 'arabic':
-                    processed_image = self.apply_noise_reduction(processed_image, 'bilateral_high_quality')
-                else:
-                    processed_image = self.apply_noise_reduction(processed_image, 'median_high_quality')
+                self.logger.debug("Réduction du bruit haute qualité")
+                processed_image = self.apply_noise_reduction(processed_image, 'bilateral_high_quality')
             
-            # 6. Augmentation de la netteté
+            # 5. Augmentation de la netteté
             if config.sharpen:
+                self.logger.debug(f"Augmentation de la netteté (facteur: {config.sharpen_factor})")
                 processed_image = self.sharpen_image(processed_image, config.sharpen_factor)
             
-            # 7. Redimensionnement
+            # 6. REDIMENSIONNEMENT HAUTE QUALITÉ (CLÉ POUR 2160p)
             if config.high_resolution_mode:
-                processed_image = self.resize_image_high_quality(processed_image, config.target_height)
+                self.logger.debug("Redimensionnement haute qualité pour 2160p")
+                processed_image = self.resize_image_high_quality(processed_image, target_height=2160)
             elif config.resize_factor != 1.0:
-                processed_image = self.resize_image_high_quality(
-                    processed_image, 
-                    int(processed_image.height * config.resize_factor)
-                )
+                self.logger.debug(f"Redimensionnement standard (facteur: {config.resize_factor})")
+                processed_image = self.resize_image(processed_image, config.resize_factor, 'lanczos')
             
-            # 8. Binarisation
+            # 7. Binarisation (en dernier pour préserver la qualité)
             if config.binarization_method:
+                self.logger.debug(f"Binarisation haute qualité ({config.binarization_method})")
                 processed_image = self.apply_binarization(processed_image, config.binarization_method)
             
-            # 9. Suppression des bordures
+            # 8. Suppression des bordures
             if config.border_removal:
-                processed_image = self.remove_borders(processed_image)
+                self.logger.debug("Suppression des bordures")
+                processed_image = self.remove_borders(processed_image, margin=20)
             
-            self.logger.info("Prétraitement terminé avec succès")
+            self.logger.info("Pipeline de prétraitement HAUTE QUALITÉ terminé avec succès")
             
         except Exception as e:
-            self.logger.error(f"Erreur prétraitement: {e}")
+            self.logger.error(f"Erreur prétraitement haute qualité: {e}")
         
         return processed_image
     
-    def apply_all_preprocessing_high_quality(self, image, config=None):
-        """
-        ALIAS pour compatibilité - Identique à apply_all_preprocessing
-        """
-        return self.apply_all_preprocessing(image, config)
-    
     def process_image_file_high_quality(self, input_path, output_path, config=None):
         """
-        Traite un fichier image en HAUTE QUALITÉ avec support multilingue
+        Traite un fichier image en HAUTE QUALITÉ (2160p target)
         """
         from src.utils.image_utils import ImageUtils
         
@@ -891,22 +508,19 @@ class ImageProcessor:
             # Charger l'image
             original_image = img_utils.load_image(input_path)
             
-            # Appliquer le prétraitement
-            processed_image = self.apply_all_preprocessing(original_image, config)
+            # Appliquer le prétraitement HAUTE QUALITÉ
+            processed_image = self.apply_all_preprocessing_high_quality(original_image, config)
             
-            # Sauvegarder
+            # Sauvegarder en haute qualité
             img_utils.save_image(processed_image, output_path, quality=100)
             
-            # Détecter la langue
-            language = self.detect_language(original_image)
-            
-            # Informations
+            # Récupérer les métriques
             if isinstance(processed_image, Image.Image):
                 final_size = processed_image.size
             else:
                 final_size = processed_image.shape
             
-            self.logger.info(f"Image traitée: {output_path} - Taille: {final_size} - Langue: {language}")
+            self.logger.info(f"Image haute qualité sauvegardée: {output_path} - Taille: {final_size}")
             
             return {
                 'success': True,
@@ -914,12 +528,11 @@ class ImageProcessor:
                 'output_path': output_path,
                 'original_size': original_image.size if isinstance(original_image, Image.Image) else original_image.shape,
                 'processed_size': final_size,
-                'detected_language': language,
-                'quality_boost': "HIGH_QUALITY_MULTILINGUAL"
+                'quality_boost': "HIGH_QUALITY_2160P"
             }
             
         except Exception as e:
-            self.logger.error(f"Erreur traitement {input_path}: {e}")
+            self.logger.error(f"Erreur traitement haute qualité {input_path}: {e}")
             return {
                 'success': False,
                 'error': str(e),

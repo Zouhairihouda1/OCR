@@ -1,0 +1,29 @@
+* [33m5132e39[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m OCR Multilingue - Support arabe complet
+* [33maef85d5[m feat: suppression file header
+* [33md37a60f[m feat:app
+* [33m3dc5a13[m feat:Personne 2 (Hiba Saad): Implémentation complète des modules de prétraitement OCR - ImageUtils, ImageProcessor, QualityAnalyzer avec tests unitaires
+* [33m3f60380[m feat:Enhance OCR engine with language detection features
+* [33m18fcf3a[m feat:image_processor): amélioration algorithmes prétraitement OCR
+* [33m36d3325[m feat:app
+* [33m29b5dce[m feat:test_interface
+* [33m42c7388[m feat:README.md
+* [33ma13093c[m feat:README.md
+* [33m4b15c2d[m feat:README.md
+* [33mea5a8b1[m feat:app
+* [33m47c8fb4[m Refactor app.py for improved OCR interface and functionality
+* [33m549d8eb[m Create initial database schema with tables
+* [33m7e8e8fc[m Update database.py
+* [33mb33f117[m Create database.py
+* [33m4116684[m feat:app
+* [33m74aeede[m feat:app
+* [33m00613ac[m feat:suppression de model image_manager
+* [33m35f48d2[m feat:suppression du file correction_controller
+* [33mee96ac1[m feat: controller principal
+* [33m202eb3e[m feat: config
+* [33m043a1cc[m Enhance CorrectionModel with language detection
+* [33mc7f285a[m Enhance OCR engine with language detection features
+* [33m57d4019[m Language Detector
+* [33m326b1e8[m feat(image_processor): amélioration algorithmes prétraitement OCR
+* [33m73dcd61[m tests: implémentation complète des tests unitaires pour modules de prétraitement OCR
+*   [33me593ce1[m Merge branch 'main' of https://github.com/Zouhairihouda1/OCR
+[32m|[m[33m\[m  
