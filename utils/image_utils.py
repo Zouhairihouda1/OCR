@@ -447,4 +447,4 @@ class ImageUtils:
             return image
         except Exception as e:
             self.logger.error(f"Erreur création miniature: {e}")
-            return image
+            return image 
