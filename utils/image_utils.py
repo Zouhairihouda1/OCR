@@ -1,6 +1,6 @@
 """
 Utilitaires pour la manipulation d'images
-Développé par [Votre Nom] - Personne 2
+Développé par [HiBa saaD] - Personne 2
 """
 import numpy as np
 from PIL import Image, ImageOps

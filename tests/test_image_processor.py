@@ -1,6 +1,6 @@
 """
 Tests pour les modules de prétraitement d'images
-Développé par [Votre Nom] - Personne 2
+Développé par [HiBa saaD] - Personne 2
 """
 import unittest
 import sys
