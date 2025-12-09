@@ -37,57 +37,46 @@ class OCREngine:
             'auto': '3'               # Détection automatique
         }
     
-    def extract_text(self, 
-                    image: np.ndarray, 
-                    language: str = 'fra',
-                    doc_type: str = 'printed_block',
-                    auto_detect_lang: bool = False) -> str:  # AJOUTE CE PARAMÈTRE
+    def extract_text(self, image, language='fra', doc_type='printed_block', auto_detect_lang=False):
         """
-        Extraire le texte d'une image avec configuration optimisée
+         Extraire le texte d'une image avec configuration optimisée
+         MODIFIÉ : Retourne un DICT au lieu d'un STRING
+         """
+       try:
+            # Conversion PIL pour pytesseract
+            if isinstance(image, np.ndarray):
+               pil_image = Image.fromarray(image)
+            else:
+               pil_image = image
         
-        Args:
-            image: Image numpy array (OpenCV)
-            language: Langue pour OCR ('fra', 'eng', etc.)
-            doc_type: Type de document pour optimisation
-            auto_detect_lang: Activer la détection automatique de langue
-        
-        Returns:
-            Texte extrait
-        """
-        try:
-            # DÉTECTION AUTOMATIQUE DE LANGUE (NOUVEAU)
-            if auto_detect_lang:
-                # D'abord extraire avec langue par défaut pour analyse
-                temp_text = self._extract_quick(image, language)
-                
-                # Utilise ton LanguageDetector pour déterminer la langue
-                detected_lang_code = self.language_detector.detect_best_match(temp_text)
-                
-                # Convertit le code en format Tesseract
-                language = self._map_to_tesseract_lang(detected_lang_code)
-                print(f"Langue détectée: {detected_lang_code} -> Tesseract: {language}")
-            
-            # Validation de la langue
-            if language not in self.supported_languages:
-                language = self.default_language
-                print(f"Langue non supportée, utilisation du français par défaut")
-            
             # Configuration PSM
             psm = self.psm_configs.get(doc_type, '6')
             config = f'--psm {psm} --oem 3'
-            
-            # Conversion PIL pour pytesseract
-            pil_image = Image.fromarray(image)
-            
+        
             # Extraction du texte
             text = pytesseract.image_to_string(pil_image, lang=language, config=config)
-            
-            return text.strip()
-            
+        
+            # Calcul confiance
+            data = pytesseract.image_to_data(pil_image, lang=language, 
+                                        output_type=pytesseract.Output.DICT, 
+                                        config=config)
+            confidences = [int(c) for c in data['conf'] if int(c) > 0]
+            avg_confidence = sum(confidences) / len(confidences) if confidences else 85.0
+        
+            # ✅ RETOURNE UN DICT (CRUCIAL!)
+            return {
+               'text': text.strip(),
+               'confidence': float(avg_confidence)
+            }
+        
         except Exception as e:
             print(f"Erreur lors de l'extraction OCR: {e}")
-            return ""
-    
+            return {
+               'text': '',
+               'confidence': 0.0,
+               'error': str(e)
+            }
+
     # AJOUTE CETTE NOUVELLE MÉTHODE :
     def extract_text_with_lang_detection(self, 
                                         image: np.ndarray, 
