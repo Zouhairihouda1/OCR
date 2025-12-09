@@ -6,65 +6,50 @@ import tempfile
 from datetime import datetime
 import time
 
-# ========== CONFIGURATION TESSERACT (CORRIGÉE) ==========
-try:
-    import pytesseract
-    from PIL import Image
-    
+# ========== CONFIGURATION TESSERACT ==========
+import pytesseract
+from PIL import Image
+import os
+import platform
+
+# Détection automatique de l'environnement
+if platform.system() == 'Windows':
     # Configuration pour Windows
-    if os.name == 'nt':  # Windows
-        # Essayer plusieurs chemins possibles
-        possible_paths = [
-            r'C:\Program Files\Tesseract-OCR\tesseract.exe',
-            r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
-            r'C:\Users\HP\AppData\Local\Programs\Tesseract-OCR\tesseract.exe',
-            r'C:\Tesseract-OCR\tesseract.exe'
-        ]
-        
-        tesseract_found = False
-        for path in possible_paths:
-            if os.path.exists(path):
-                pytesseract.pytesseract.tesseract_cmd = path
-                tesseract_found = True
-                break
-        
-        if not tesseract_found:
-            st.error("""
-            ⚠️ **Tesseract n'est pas installé ou introuvable**
-            
-            **Pour installer Tesseract :**
-            1. Téléchargez depuis: https://github.com/UB-Mannheim/tesseract/wiki
-            2. Installez dans `C:\\Program Files\\Tesseract-OCR\\`
-            3. Redémarrez Streamlit
-            """)
-            st.stop()
+    tesseract_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    if os.path.exists(tesseract_path):
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+        print(f"✅ Windows - Tesseract: {tesseract_path}")
+    else:
+        print("⚠️ Tesseract non trouvé sur Windows")
+else:
+    # Configuration pour Linux/Mac (Codespaces)
+    print("✅ Linux/Mac - Tesseract depuis PATH")
+
+# Test de vérification
+try:
+    version = pytesseract.get_tesseract_version()
+    print(f"✅ Tesseract version: {version}")
+except Exception as e:
+    print(f"❌ ERREUR: {e}")
+    import streamlit as st
+    st.error(f"""
+    ❌ **Tesseract introuvable**
     
-    # Vérifier que Tesseract fonctionne
-    try:
-        pytesseract.get_tesseract_version()
-    except Exception as e:
-        st.error(f"""
-        ❌ **Tesseract trouvé mais ne fonctionne pas**
-        
-        Erreur: {str(e)}
-        
-        **Solutions :**
-        - Vérifiez que Tesseract est bien installé
-        - Ajoutez Tesseract au PATH Windows
-        - Réinstallez Tesseract si nécessaire
-        """)
-        st.stop()
-        
-except ImportError:
-    st.error("⚠️ pytesseract n'est pas installé. Installez-le avec: `pip install pytesseract`")
+    Sur Codespaces, installez avec:
+```bash
+    sudo apt-get update
+    sudo apt-get install -y tesseract-ocr tesseract-ocr-fra
+```
+    """)
     st.stop()
+    
 
 # ========== CONFIGURATION ==========
 st.set_page_config(
     page_title="OCR - Reconnaissance de Texte",
     page_icon="📄",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed"  # Garde collapsed
 )
 
 # ========== STYLE CSS MODERNE ==========
@@ -74,6 +59,150 @@ st.markdown("""
     .stApp {
         background: linear-gradient(135deg, #FFFFFF 0%, #F8F9FA 100%);
     }
+    
+    /* ========== FIX PRINCIPAL: TOUT LE TEXTE EN NOIR ========== */
+    
+    /* Forcer TOUT le texte de base en NOIR */
+    p, span, div, label, h1, h2, h3, h4, h5, h6 {
+        color: #000000 !important;
+    }
+    
+    /* Labels de formulaire - FOND TRANSPARENT et texte NOIR */
+    .stSelectbox label, 
+    .stCheckbox label,
+    .stRadio label,
+    .stTextInput label,
+    .stTextArea label,
+    .stNumberInput label,
+    [data-testid="stWidgetLabel"] {
+        color: #000000 !important;
+        background-color: transparent !important;
+    }
+    
+    /* Container des widgets */
+    [data-testid="stVerticalBlock"] > div {
+        background-color: transparent !important;
+    }
+    
+    /* Selectbox - Fond BLANC et texte NOIR */
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="select"] {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        border: 2px solid #E8E8E8 !important;
+        border-radius: 10px !important;
+    }
+    
+    /* Options du dropdown - Fond BLANC */
+    [role="listbox"],
+    [role="option"] {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+    }
+    
+    [role="option"]:hover {
+        background-color: #F0F8FF !important;
+        color: #000000 !important;
+    }
+    
+    /* Texte sélectionné dans selectbox */
+    div[data-baseweb="select"] span {
+        color: #000000 !important;
+    }
+    
+    /* Checkbox - Fond BLANC et texte NOIR */
+    .stCheckbox {
+        background-color: transparent !important;
+    }
+    
+    .stCheckbox > label,
+    .stCheckbox > label > div,
+    .stCheckbox > label > div > p,
+    .stCheckbox span {
+        color: #000000 !important;
+        background-color: transparent !important;
+    }
+    
+    /* Expander - TITRE et contenu avec fond BLANC */
+    [data-testid="stExpander"] {
+        background-color: #FFFFFF !important;
+        border-radius: 12px !important;
+        padding: 8px !important;
+        border: 2px solid #E8E8E8 !important;
+    }
+    
+    /* Titre de l'expander (summary) - TEXTE NOIR sur fond BLANC */
+    [data-testid="stExpander"] summary {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        font-weight: 500 !important;
+        padding: 12px 16px !important;
+        border-radius: 10px !important;
+    }
+    
+    /* Hover sur le titre */
+    [data-testid="stExpander"] summary:hover {
+        background-color: #F8F9FA !important;
+    }
+    
+    /* Contenu de l'expander */
+    [data-testid="stExpander"] > div > div {
+        background-color: #FFFFFF !important;
+        padding: 16px !important;
+    }
+    
+    [data-testid="stExpander"] p,
+    [data-testid="stExpander"] label,
+    [data-testid="stExpander"] span,
+    [data-testid="stExpander"] div {
+        color: #000000 !important;
+    }
+    
+    /* Icône de l'expander */
+    [data-testid="stExpander"] svg {
+        color: #4A90E2 !important;
+    }
+    
+    /* File uploader - Fond BLANC pour voir le texte noir */
+    [data-testid="stFileUploader"] section,
+    [data-testid="stFileUploader"] > div,
+    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+    }
+    
+    /* File uploader - TOUT le texte EN NOIR */
+    [data-testid="stFileUploader"] label,
+    [data-testid="stFileUploader"] p,
+    [data-testid="stFileUploader"] span,
+    [data-testid="stFileUploader"] small,
+    [data-testid="stFileUploader"] div {
+        color: #000000 !important;
+    }
+    
+    /* Dropzone spécifique */
+    [data-testid="stFileUploaderDropzone"] {
+        background-color: #FAFAFA !important;
+    }
+    
+    /* Bouton "Browse files" visible */
+    [data-testid="stFileUploader"] button {
+        background-color: #4A90E2 !important;
+        color: #FFFFFF !important;
+        border: none !important;
+    }
+    
+    /* Markdown containers */
+    [data-testid="stMarkdownContainer"],
+    [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMarkdownContainer"] span,
+    .stMarkdown, 
+    .stMarkdown p, 
+    .stMarkdown span {
+        color: #000000 !important;
+    }
+    
+    /* ========== ONGLETS ========== */
     
     /* Onglets NON sélectionnés - Texte NOIR */
     .stTabs [data-baseweb="tab"] > div {
@@ -92,6 +221,8 @@ st.markdown("""
         border-bottom: 3px solid #FF0000 !important;
     }
 
+    /* ========== AUTRES ÉLÉMENTS ========== */
+    
     /* Cache les éléments inutiles */
     #MainMenu, footer, header {visibility: hidden;}
     
@@ -102,31 +233,24 @@ st.markdown("""
         color: #1A1A1A !important;
     }
     
-    /* Zone de drag & drop premium */
+    /* Zone de drag & drop premium - FOND BLANC */
     [data-testid="stFileUploader"] {
         border: 3px dashed #E8E8E8;
         border-radius: 16px;
         padding: 60px 40px;
-        background: linear-gradient(145deg, #FFFFFF 0%, #FAFAFA 100%);
+        background: #FFFFFF !important;
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         box-shadow: 0 4px 20px rgba(0,0,0,0.03);
     }
     
     [data-testid="stFileUploader"]:hover {
         border-color: #4A90E2;
-        background: linear-gradient(145deg, #F8FBFF 0%, #FFFFFF 100%);
+        background: #F8FBFF !important;
         box-shadow: 0 8px 32px rgba(74,144,226,0.15);
         transform: translateY(-2px);
     }
-
-    /* CORRECTION: Nom du fichier uploadé visible en NOIR */
-    [data-testid="stFileUploader"] section small,
-    [data-testid="stFileUploader"] section p,
-    [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
-        color: #000000 !important;
-    }
     
-    /* Boutons modernes */
+    /* Boutons modernes - Fond BLEU et texte BLANC */
     .stButton > button {
         border-radius: 10px;
         padding: 14px 32px;
@@ -134,12 +258,23 @@ st.markdown("""
         border: none;
         transition: all 0.3s ease;
         box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+        background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%) !important;
+        color: #FFFFFF !important;
     }
     
     .stButton > button:hover {
         transform: translateY(-3px);
         box-shadow: 0 6px 20px rgba(74,144,226,0.4);
+        background: linear-gradient(135deg, #5BA0F2 0%, #468ACD 100%) !important;
+    }
+    
+    /* Bouton de téléchargement */
+    .stDownloadButton > button {
+        background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%) !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 10px !important;
+        padding: 14px 32px !important;
     }
     
     /* Text area premium - TEXTE NOIR FORCE */
@@ -226,29 +361,28 @@ st.markdown("""
     }
 
     /* Style pour les boîtes d'historique */
-.history-box {
-    background-color: #f0f0f0;
-    border-radius: 10px;
-    padding: 15px;
-    margin-bottom: 15px;
-    border-left: 4px solid #4A90E2;
-}
+    .history-box {
+        background-color: #f0f0f0;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-left: 4px solid #4A90E2;
+    }
 
-.image-name {
-    color: #4A90E2;
-    font-weight: 700;
-    font-size: 16px;
-    margin-bottom: 5px;
-}
+    .image-name {
+        color: #4A90E2;
+        font-weight: 700;
+        font-size: 16px;
+        margin-bottom: 5px;
+    }
 
-.image-details {
-    color: #666;
-    font-size: 14px;
-    margin-bottom: 10px;
-}
+    .image-details {
+        color: #666;
+        font-size: 14px;
+        margin-bottom: 10px;
+    }
 </style>
 """, unsafe_allow_html=True)
-
 # ========== CONFIGURATION DES CHEMINS ==========
 current_dir = Path(__file__).parent
 project_root = current_dir.parent if current_dir.name == "views" else current_dir
@@ -537,93 +671,106 @@ def main():
                     if 'saved_path' in st.session_state:
                         st.success(f"✓ Sauvegardé")
     
-    # ==================== ONGLET 2: TRAITEMENT PAR LOT ====================
+  
+ # ==================== ONGLET 2: TRAITEMENT PAR LOT ====================
     with tab2:
         st.markdown("<br>", unsafe_allow_html=True)
-        
+    
         col_batch_left, col_batch_right = st.columns([1, 1], gap="large")
-        
+    
         with col_batch_left:
-            st.markdown("<h3 style='color: #000;'> 📁 Sélectionner un dossier d'images</h3>", unsafe_allow_html=True)
-           
+            st.markdown("<h3 style='color: #000;'> 📁 Traitement par lot d'images</h3>", unsafe_allow_html=True)
+        
+        # Upload multiple files
+            uploaded_files = st.file_uploader(
+               "Glissez plusieurs images ici ou cliquez pour sélectionner",
+                type=['png', 'jpg', 'jpeg', 'tiff', 'bmp'],
+                accept_multiple_files=True,
+                help="Sélectionnez plusieurs images à traiter en une fois",
+                key="batch_uploader"
+           )
+        
+            if uploaded_files:
+               st.success(f"✅ {len(uploaded_files)} image(s) sélectionnée(s)")
             
-            folder_path = st.text_input(
-                "Chemin du dossier",
-                placeholder="Ex: C:\\Users\\HP\\Desktop\\images",
-                help="Entrez le chemin complet du dossier contenant les images"
-            )
-            
-            # Options
+            # Afficher les images sélectionnées
+            with st.expander("📋 Images sélectionnées", expanded=False):
+                for f in uploaded_files:
+                    st.text(f"• {f.name}")
+        
+        # Options
             with st.expander("⚙️ Options de traitement par lot", expanded=True):
                 col_opt1, col_opt2 = st.columns(2)
-                
-                with col_opt1:
-                    batch_language = st.selectbox(
-                        "Langue",
-                        ["fra", "eng", "ara"],
-                        index=0,
-                        key="batch_lang"
-                    )
-                    save_individual = st.checkbox("Fichiers .txt individuels", value=True)
-                
-                with col_opt2:
-                    batch_preprocessing = st.checkbox("Prétraitement", value=True)
-                    create_summary = st.checkbox("Fichier récapitulatif", value=True)
             
+            with col_opt1:
+                batch_language = st.selectbox(
+                    "Langue",
+                    ["fra", "eng", "ara"],
+                    index=0,
+                    key="batch_lang"
+                )
+                save_individual = st.checkbox("Fichiers .txt individuels", value=True)
+            
+            with col_opt2:
+                batch_preprocessing = st.checkbox("Prétraitement", value=True)
+                create_summary = st.checkbox("Fichier récapitulatif", value=True)
+        
             st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Bouton de traitement
+        if uploaded_files and st.button("🚀 Traiter les images", type="primary", use_container_width=True):
+            st.markdown("### 🔄 Traitement en cours...")
+            progress_bar = st.progress(0)
+            status_text = st.empty()
             
-            # Bouton de traitement
-            if st.button("🚀 Traiter le dossier", type="primary", use_container_width=True):
-                if folder_path and os.path.isdir(folder_path):
-                    image_files = get_image_files(folder_path)
+            batch_results = []
+            
+            for idx, uploaded_file in enumerate(uploaded_files):
+                status_text.text(f"Traitement: {uploaded_file.name} ({idx + 1}/{len(uploaded_files)})")
+                
+                options = {
+                    'language': batch_language,
+                    'preprocessing': batch_preprocessing
+                }
+                
+                result = process_single_image(uploaded_file, options)
+                
+                if 'error' not in result:
+                    batch_results.append({
+                        'filename': uploaded_file.name,
+                        'text': result['text'],
+                        'confidence': result['confidence'],
+                        'word_count': result['word_count']
+                    })
                     
-                    if image_files:
-                        st.markdown("### 🔄 Traitement en cours...")
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        batch_results = []
-                        
-                        for idx, img_path in enumerate(image_files):
-                            status_text.text(f"Traitement: {img_path.name}")
-                            
-                            with open(img_path, 'rb') as f:
-                                from io import BytesIO
-                                img_bytes = BytesIO(f.read())
-                                img_bytes.name = img_path.name
-                                
-                                options = {
-                                    'language': batch_language,
-                                    'preprocessing': batch_preprocessing
-                                }
-                                
-                                result = process_single_image(img_bytes, options)
-                                
-                                if 'error' not in result:
-                                    batch_results.append({
-                                        'filename': img_path.name,
-                                        'text': result['text'],
-                                        'confidence': result['confidence'],
-                                        'word_count': result['word_count']
-                                    })
-                                    
-                                    # Sauvegarder fichier individuel
-                                    if save_individual:
-                                        save_text_to_file(
-                                            result['text'],
-                                            img_path.stem,
-                                            "batch"
-                                        )
-                            
-                            progress_bar.progress((idx + 1) / len(image_files))
-                        
-                        # Créer récapitulatif
-                        if create_summary and batch_results:
-                            summary = f"""RÉCAPITULATIF TRAITEMENT PAR LOT
+                    # Sauvegarder fichier individuel
+                    if save_individual:
+                        save_text_to_file(
+                            result['text'],
+                            Path(uploaded_file.name).stem,
+                            "batch"
+                        )
+                    
+                    # Ajouter à l'historique
+                    st.session_state.history.append({
+                        'filename': uploaded_file.name,
+                        'text': result['text'],
+                        'confidence': result['confidence'],
+                        'timestamp': datetime.now(),
+                        'type': 'batch'
+                    })
+                else:
+                    st.warning(f"⚠️ Erreur avec {uploaded_file.name}: {result.get('error', 'Erreur inconnue')}")
+                
+                progress_bar.progress((idx + 1) / len(uploaded_files))
+            
+            # Créer récapitulatif
+            if create_summary and batch_results:
+                summary = f"""RÉCAPITULATIF TRAITEMENT PAR LOT
 {'=' * 60}
 
 Date: {datetime.now().strftime('%d/%m/%Y à %H:%M:%S')}
-Dossier: {folder_path}
+Nombre d'images: {len(uploaded_files)}
 
 STATISTIQUES GLOBALES
 {'-' * 60}
@@ -635,88 +782,86 @@ DÉTAILS PAR FICHIER
 {'-' * 60}
 
 """
-                            
-                            for idx, r in enumerate(batch_results, 1):
-                                summary += f"""\n[{idx}] {r['filename']}
+                
+                for idx, r in enumerate(batch_results, 1):
+                    summary += f"""\n[{idx}] {r['filename']}
 Confiance: {r['confidence']:.1f}% | Mots: {r['word_count']}
 
 {r['text']}
 
 {'=' * 60}\n"""
-                            
-                            summary_path = save_text_to_file(
-                                summary,
-                                "summary_batch",
-                                "batch"
-                            )
-                            st.session_state.summary_path = str(summary_path)
-                        
-                        st.session_state.batch_results = batch_results
-                        status_text.empty()
-                        st.success(f"✅ {len(batch_results)} images traitées avec succès!")
-                        st.rerun()
-                    else:
-                        st.warning("⚠️ Aucune image trouvée dans ce dossier")
-                else:
-                    st.error("❌ Dossier invalide ou inexistant")
+                
+                summary_path = save_text_to_file(
+                    summary,
+                    "summary_batch",
+                    "batch"
+                )
+                st.session_state.summary_path = str(summary_path)
+            
+            st.session_state.batch_results = batch_results
+            status_text.empty()
+            st.success(f"✅ {len(batch_results)} images traitées avec succès!")
+            st.rerun()
         
-        with col_batch_right:
-            if st.session_state.batch_results:
-                st.markdown("### 📊 Résultats du traitement par lot")
-                
-                results = st.session_state.batch_results
-                
-                # Métriques globales
-                col_m1, col_m2, col_m3 = st.columns(3)
-                
-                with col_m1:
-                    st.metric("Images", len(results))
-                
-                with col_m2:
-                    avg_conf = sum(r['confidence'] for r in results) / len(results)
-                    st.metric("Confiance moy.", f"{avg_conf:.1f}%")
-                
-                with col_m3:
-                    total_words = sum(r['word_count'] for r in results)
-                    st.metric("Mots totaux", f"{total_words:,}")
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                # Liste des fichiers
-                st.markdown("#### 📄 Fichiers traités")
-                
-                for r in results:
-                    with st.expander(f"📄 {r['filename']} - Confiance: {r['confidence']:.1f}%"):
-                        st.text_area(
-                            "Texte",
-                            r['text'],
-                            height=200,
-                            label_visibility="collapsed",
-                            key=f"batch_{r['filename']}"
-                        )
-                        
-                        st.download_button(
-                            "💾 Télécharger",
-                            r['text'],
-                            file_name=f"{Path(r['filename']).stem}.txt",
-                            mime="text/plain",
-                            key=f"dl_{r['filename']}"
-                        )
-                
-                # Télécharger récapitulatif
-                if 'summary_path' in st.session_state:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    with open(st.session_state.summary_path, 'r', encoding='utf-8') as f:
-                        st.download_button(
-                            "📥 Télécharger le récapitulatif complet",
-                            f.read(),
-                            file_name="recapitulatif_batch.txt",
-                            mime="text/plain",
-                            use_container_width=True
-                        )
-            else:
-                st.info("👈 Sélectionnez un dossier pour commencer")
+        elif not uploaded_files:
+            st.info("👆 Glissez plusieurs images ou cliquez pour sélectionner des fichiers")
     
+    with col_batch_right:
+        if st.session_state.batch_results:
+            st.markdown("### 📊 Résultats du traitement par lot")
+            
+            results = st.session_state.batch_results
+            
+            # Métriques globales
+            col_m1, col_m2, col_m3 = st.columns(3)
+            
+            with col_m1:
+                st.metric("Images", len(results))
+            
+            with col_m2:
+                avg_conf = sum(r['confidence'] for r in results) / len(results)
+                st.metric("Confiance moy.", f"{avg_conf:.1f}%")
+            
+            with col_m3:
+                total_words = sum(r['word_count'] for r in results)
+                st.metric("Mots totaux", f"{total_words:,}")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Liste des fichiers
+            st.markdown("#### 📄 Fichiers traités")
+            
+            for r in results:
+                with st.expander(f"📄 {r['filename']} - Confiance: {r['confidence']:.1f}%"):
+                    st.text_area(
+                        "Texte",
+                        r['text'],
+                        height=200,
+                        label_visibility="collapsed",
+                        key=f"batch_{r['filename']}"
+                    )
+                    
+                    st.download_button(
+                        "💾 Télécharger",
+                        r['text'],
+                        file_name=f"{Path(r['filename']).stem}.txt",
+                        mime="text/plain",
+                        key=f"dl_{r['filename']}"
+                    )
+            
+            # Télécharger récapitulatif
+            if 'summary_path' in st.session_state:
+                st.markdown("<br>", unsafe_allow_html=True)
+                with open(st.session_state.summary_path, 'r', encoding='utf-8') as f:
+                    st.download_button(
+                        "📥 Télécharger le récapitulatif complet",
+                        f.read(),
+                        file_name="recapitulatif_batch.txt",
+                        mime="text/plain",
+                        use_container_width=True
+                    )
+        else:
+            st.info("👈 Uploadez des images pour commencer")
     # ==================== ONGLET 3: STATISTIQUES ====================
     with tab3:
         st.markdown("<br>", unsafe_allow_html=True)
